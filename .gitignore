@@ -1,0 +1,9 @@
+# Created by .ignore support plugin (hsz.mobi)
+.idea
+.DS_store
+.env
+/backend/target
+/backend/knowledge-agent.iml
+/backend/src/main/resources/application.yml
+/frontend/node_modules/
+/data/

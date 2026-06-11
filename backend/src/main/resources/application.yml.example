@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: knowledge-agent
+
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+
+  ai:
+    model:
+      chat: openai
+      embedding: ollama
+    openai:
+      api-key: ${DEEPSEEK_API_KEY:your-api-key}
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.7
+      embedding:
+        enabled: false
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        options:
+          model: nomic-embed-text
+    vectorstore:
+      chroma:
+        host: ${CHROMA_HOST:localhost}
+        port: ${CHROMA_PORT:8000}
+        collection-name: knowledge-base
+        initialize-schema: true
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+
+server:
+  port: ${SERVER_PORT:8080}
+
+# Knowledge storage
+knowledge:
+  base-path: ${KNOWLEDGE_PATH:./data/knowledge}
+
+# Web search configuration
+websearch:
+  # Provider: searxng (recommended), duckduckgo, or bing
+  provider: ${WEBSEARCH_PROVIDER:searxng}
+  # SearXNG local instance (runs via docker-compose)
+  searxng:
+    url: ${SEARXNG_URL:http://localhost:8081}
+  # DuckDuckGo HTML scraping (may need proxy to avoid CAPTCHA)
+  duckduckgo:
+    url: https://html.duckduckgo.com/html/
+  # Proxy for outbound HTTP (matches system proxy, e.g. Clash/Surge)
+  proxy:
+    host: ${PROXY_HOST:127.0.0.1}
+    port: ${PROXY_PORT:7897}
+    enabled: ${PROXY_ENABLED:false}
+
+logging:
+  level:
+    com.knowledge: DEBUG
+    org.springframework.ai: DEBUG

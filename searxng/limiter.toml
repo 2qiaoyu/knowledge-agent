@@ -1,0 +1,6 @@
+# SearXNG limiter configuration
+# See: https://docs.searxng.org/admin/engines/limiter.html
+
+[botdetection.ip_limit]
+# Disable link_token method (avoids CAPTCHA-like challenges for API access)
+link_token = false
