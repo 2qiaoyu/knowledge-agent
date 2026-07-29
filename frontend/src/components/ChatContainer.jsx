@@ -17,7 +17,7 @@ export default function ChatContainer() {
   }, [messages, streamingContent]);
 
   // Show knowledge domain content if selected
-  if (selectedDomain && !messages.length && !streaming) {
+  if (selectedDomain) {
     return (
       <main className="chat-container">
         <div className="knowledge-viewer">
