@@ -7,7 +7,7 @@
 | 层 | 技术 |
 |---|------|
 | 前端 | React 18 + Vite + Zustand |
-| 后端 | Java 17 + Spring Boot 3.4 + Spring AI 1.0.0-M6 |
+| 后端 | Java 21 + Spring Boot 4.1 + Spring AI 2.0.0 |
 | 对话模型 | DeepSeek Chat (OpenAI 兼容协议) |
 | 向量嵌入 | Ollama (nomic-embed-text, 本地运行) |
 | 向量数据库 | Chroma DB |
@@ -22,7 +22,7 @@
 └──────────────────────┬──────────────────────────────────┘
                        │ HTTP/SSE (streaming)
 ┌──────────────────────┴──────────────────────────────────┐
-│                Backend (Java 17 + Spring Boot)           │
+│                Backend (Java 21 + Spring Boot 4.1)        │
 │                                                          │
 │  ChatController → ChatService                           │
 │     ├── WebSearchService   (SearXNG / DuckDuckGo)       │
@@ -101,7 +101,7 @@ knowledge-agent/
 
 ### 1. 环境准备
 
-- JDK 17+
+- JDK 21+
 - Node.js 18+
 - Docker (运行 Chroma)
 - Ollama (本地向量嵌入)

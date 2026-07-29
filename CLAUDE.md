@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 启动基础设施 (Chroma + SearXNG)
 docker-compose up -d
 
-# 后端 (Java 17, Spring Boot 3.4)
+# 后端 (Java 21, Spring Boot 4.1)
 cd backend
 mvn spring-boot:run          # 启动后端 (localhost:8080)
 mvn compile                  # 仅编译
@@ -30,7 +30,7 @@ npm run build                # 生产构建
 | 层 | 技术 |
 |---|---|
 | 前端 | React 18 + Vite + Zustand + Tailwind CSS 4 |
-| 后端 | Java 17 + Spring Boot 3.4 + Spring AI 1.0.0 + WebFlux |
+| 后端 | Java 21 + Spring Boot 4.1 + Spring AI 2.0.0 + WebFlux |
 | LLM | DeepSeek Chat (OpenAI 兼容协议, 通过 Spring AI OpenAI starter) |
 | 向量嵌入 | Ollama (nomic-embed-text, 本地) |
 | 向量数据库 | Chroma DB (Docker) |
@@ -62,7 +62,7 @@ npm run build                # 生产构建
   - `KnowledgeService` — Markdown 文件读写 + Chroma 向量索引/检索
   - `SessionService` — 会话 CRUD，持久化到 `data/sessions.json`
 - **model/** — DTO: `ChatRequest`, `ChatMessage`, `Session`
-- **config/** — Spring AI 自动配置，无需手动声明 Bean
+- **config/** — Spring AI 自动配置 + Jackson ObjectMapper 自定义（注册 JavaTimeModule）
 
 ### 前端状态管理 (Zustand store)
 

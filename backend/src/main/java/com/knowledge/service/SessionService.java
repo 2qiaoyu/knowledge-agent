@@ -2,7 +2,6 @@ package com.knowledge.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.knowledge.model.ChatMessage;
 import com.knowledge.model.Session;
 import jakarta.annotation.PostConstruct;
@@ -25,9 +24,8 @@ public class SessionService {
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
 
-    public SessionService() {
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.registerModule(new JavaTimeModule());
+    public SessionService(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct

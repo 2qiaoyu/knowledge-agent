@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.0</version>
+        <version>4.1.0</version>
     </parent>
 
     <groupId>com.knowledge</groupId>
@@ -16,8 +16,8 @@
     <name>knowledge-agent</name>
 
     <properties>
-        <java.version>17</java.version>
-        <spring-ai.version>1.0.0</spring-ai.version>
+        <java.version>21</java.version>
+        <spring-ai.version>2.0.0</spring-ai.version>
     </properties>
 
     <dependencies>
@@ -43,6 +43,13 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-vector-store-chroma</artifactId>
+            <version>1.1.8</version>
+        </dependency>
+
+        <!-- Jackson JSR-310 (Java Time support) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
         <!-- Jsoup (DuckDuckGo HTML parsing) -->
