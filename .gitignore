@@ -6,4 +6,5 @@
 /backend/knowledge-agent.iml
 /backend/src/main/resources/application.yml
 /frontend/node_modules/
+/frontend/dist/
 /data/
