@@ -52,6 +52,13 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
+        <!-- OpenAI OkHttp client (required for manual OpenAIClient construction) -->
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java-client-okhttp</artifactId>
+            <version>4.34.0</version>
+        </dependency>
+
         <!-- Jsoup (DuckDuckGo HTML parsing) -->
         <dependency>
             <groupId>org.jsoup</groupId>

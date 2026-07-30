@@ -56,13 +56,16 @@ npm run build                # 生产构建
 - **controller/** — REST + SSE 端点
   - `ChatController` — `/api/chat/stream` (SSE), `/api/sessions`
   - `KnowledgeController` — `/api/knowledge/domains`
+  - `ProviderController` — `/api/providers` (获取可用 LLM 供应商)
 - **service/** — 业务逻辑
   - `ChatService` — 核心编排：提示词构建、流式调用 LLM、异步保存知识
   - `WebSearchService` — 多搜索提供商：SearXNG (JSON API) 优先，DuckDuckGo (Jsoup HTML 抓取) 备用，支持 HTTP 代理
   - `KnowledgeService` — Markdown 文件读写 + Chroma 向量索引/检索
   - `SessionService` — 会话 CRUD，持久化到 `data/sessions.json`
 - **model/** — DTO: `ChatRequest`, `ChatMessage`, `Session`
-- **config/** — Spring AI 自动配置 + Jackson ObjectMapper 自定义（注册 JavaTimeModule）
+- **config/** — Spring AI 自动配置 + Jackson ObjectMapper 自定义 + 多 LLM 供应商 ChatClient 配置
+  - `SpringAiConfig` — ObjectMapper 自定义
+  - `ChatClientConfig` — 多供应商 ChatClient 配置（DeepSeek + LongCat）
 
 ### 前端状态管理 (Zustand store)
 
@@ -113,9 +116,33 @@ App
     └── ChatInput (textarea + 联网搜索复选框)
 ```
 
+### 多 LLM 供应商
+
+支持 DeepSeek 和 LongCat（美团）作为 LLM 供应商，可手动切换：
+
+- **配置方式**：`application.yml` 中的 `llm.providers` 部分
+- **环境变量**：`DEEPSEEK_API_KEY`（默认）、`LONGCAT_API_KEY`（可选）
+- **API 端点**：`GET /api/providers` 返回可用供应商列表
+- **前端切换**：输入框下方下拉选择器（仅当多个供应商可用时显示）
+- **请求参数**：`ChatRequest.provider` 字段（"deepseek" 或 "longcat"）
+
+```yaml
+llm:
+  default-provider: deepseek
+  providers:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY}
+      base-url: https://api.deepseek.com
+      model: deepseek-chat
+    longcat:
+      api-key: ${LONGCAT_API_KEY:}
+      base-url: https://api.longcat.chat/openai
+      model: LongCat-Flash-Chat
+```
+
 ### 关键配置
 
-- `backend/src/main/resources/application.yml` — Spring AI、Chroma、Ollama、WebSearch 配置
-- `.env` — `DEEPSEEK_API_KEY`（必填）、搜索提供商、代理设置
+- `backend/src/main/resources/application.yml` — Spring AI、Chroma、Ollama、WebSearch、LLM 供应商配置
+- `.env` — `DEEPSEEK_API_KEY`（必填）、`LONGCAT_API_KEY`（可选）、搜索提供商、代理设置
 - `frontend/vite.config.js` — 开发端口 3000，`/api` 代理到 `localhost:8080`
 - `docker-compose.yml` — Chroma (8000) + SearXNG (8081)

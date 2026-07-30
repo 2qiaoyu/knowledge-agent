@@ -8,7 +8,7 @@
 |---|------|
 | 前端 | React 18 + Vite + Zustand |
 | 后端 | Java 21 + Spring Boot 4.1 + Spring AI 2.0.0 |
-| 对话模型 | DeepSeek Chat (OpenAI 兼容协议) |
+| 对话模型 | DeepSeek Chat (默认) / LongCat (美团, 可切换) |
 | 向量嵌入 | Ollama (nomic-embed-text, 本地运行) |
 | 向量数据库 | Chroma DB |
 | 联网搜索 | SearXNG (推荐) / DuckDuckGo (备用) |
@@ -89,7 +89,8 @@ knowledge-agent/
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/chat/stream` | POST | 发送消息，SSE 流式返回 |
+| `/api/chat/stream` | POST | 发送消息，SSE 流式返回（支持 `provider` 参数切换模型） |
+| `/api/providers` | GET | 获取可用 LLM 供应商列表 |
 | `/api/sessions` | GET | 会话列表 |
 | `/api/sessions/{id}` | GET | 会话详情 + 历史消息 |
 | `/api/sessions/{id}` | DELETE | 删除会话 |
@@ -176,7 +177,20 @@ npm run dev
 ## 核心特性
 
 - **多轮对话**：会话级别上下文记忆，支持历史会话切换
+- **多模型切换**：支持 DeepSeek 和 LongCat，可手动切换
 - **联网搜索**：一键切换，搜索结果带引用来源
 - **自动分类**：通过向量相似度将回答归入对应知识域
 - **增量更新**：同一知识域的新内容追加到已有文件
 - **流式响应**：SSE 实时显示 LLM 生成内容
+
+## 多模型配置
+
+在 `.env` 中添加 `LONGCAT_API_KEY` 即可启用 LongCat 作为备用模型：
+
+```bash
+# .env
+DEEPSEEK_API_KEY=sk-your-deepseek-key
+LONGCAT_API_KEY=your-longcat-key  # 可选
+```
+
+前端输入框下方会自动显示模型选择器（当多个模型可用时）。

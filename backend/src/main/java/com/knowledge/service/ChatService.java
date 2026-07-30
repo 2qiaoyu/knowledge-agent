@@ -10,6 +10,8 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,23 +27,42 @@ public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
-    private final ChatClient chatClient;
+    private final ChatClient defaultChatClient;
+    private final ChatClient deepseekChatClient;
+    private final ChatClient longcatChatClient;
     private final SessionService sessionService;
     private final KnowledgeService knowledgeService;
     private final WebSearchService webSearchService;
     private final ChatMemory chatMemory;
 
-    public ChatService(ChatClient.Builder chatClientBuilder,
+    public ChatService(@Qualifier("defaultChatClient") ChatClient defaultChatClient,
+                       @Qualifier("deepseekChatClient") ChatClient deepseekChatClient,
+                       @Lazy @Qualifier("longcatChatClient") ChatClient longcatChatClient,
                        SessionService sessionService,
                        KnowledgeService knowledgeService,
                        WebSearchService webSearchService) {
-        this.chatClient = chatClientBuilder.build();
+        this.defaultChatClient = defaultChatClient;
+        this.deepseekChatClient = deepseekChatClient;
+        this.longcatChatClient = longcatChatClient;
         this.sessionService = sessionService;
         this.knowledgeService = knowledgeService;
         this.webSearchService = webSearchService;
         this.chatMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(new InMemoryChatMemoryRepository())
                 .build();
+    }
+
+    /**
+     * 根据请求中的 provider 参数选择对应的 ChatClient。
+     */
+    private ChatClient resolveClient(String provider) {
+        if ("longcat".equals(provider) && longcatChatClient != null) {
+            return longcatChatClient;
+        }
+        if ("deepseek".equals(provider) && deepseekChatClient != null) {
+            return deepseekChatClient;
+        }
+        return defaultChatClient;
     }
 
     // ... existing code ...
@@ -73,11 +94,15 @@ public class ChatService {
         // 用于累积流式响应的完整答案
         StringBuilder answerBuffer = new StringBuilder();
 
+        // 根据 provider 参数选择 ChatClient
+        ChatClient client = resolveClient(request.getProvider());
+        log.info("Using LLM provider: {}", request.getProvider() != null ? request.getProvider() : "default");
+
         // 构建提示词并调用LLM获取流式响应
         return buildPrompt(request)
                 .flatMapMany(prompt -> {
                     log.debug("Querying LLM with prompt: {}", prompt);
-                    return chatClient.prompt()
+                    return client.prompt()
                             .user(prompt)
                             .advisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                             .stream()

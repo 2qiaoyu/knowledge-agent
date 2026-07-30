@@ -13,6 +13,9 @@ const useStore = create((set, get) => ({
 
   // Settings
   enableWebSearch: false,
+  llmProvider: 'deepseek',  // 'deepseek' | 'longcat'
+  availableProviders: [],
+  defaultProvider: 'deepseek',
 
   // Knowledge domains
   domains: [],
@@ -72,7 +75,7 @@ const useStore = create((set, get) => ({
 
   // Actions - Chat
   sendMessage: async (content) => {
-    const { currentSessionId, enableWebSearch } = get();
+    const { currentSessionId, enableWebSearch, llmProvider } = get();
     set({ streaming: true, streamingContent: '' });
 
     const userMsg = { id: Date.now().toString(), role: 'user', content, timestamp: new Date().toISOString() };
@@ -86,6 +89,7 @@ const useStore = create((set, get) => ({
           sessionId: currentSessionId,
           message: content,
           enableWebSearch,
+          provider: llmProvider,
         }),
       });
 
@@ -175,6 +179,21 @@ const useStore = create((set, get) => ({
 
   // Actions - Settings
   toggleWebSearch: () => set((s) => ({ enableWebSearch: !s.enableWebSearch })),
+  setLlmProvider: (provider) => set({ llmProvider: provider }),
+
+  fetchProviders: async () => {
+    try {
+      const res = await fetch('/api/providers');
+      const data = await res.json();
+      set({
+        availableProviders: data.available || [],
+        defaultProvider: data.default || 'deepseek',
+        llmProvider: data.default || 'deepseek',
+      });
+    } catch (e) {
+      console.error('Failed to fetch providers', e);
+    }
+  },
 
   // Actions - Knowledge
   fetchDomains: async () => {

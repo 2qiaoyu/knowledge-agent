@@ -16,4 +16,5 @@ public class ChatRequest {
     private String message;
     private boolean enableWebSearch;
     private String domain;  // optional, forces answer into specific domain
+    private String provider;  // optional, "deepseek" or "longcat", overrides default
 }
