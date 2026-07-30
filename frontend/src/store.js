@@ -104,33 +104,23 @@ const useStore = create((set, get) => ({
       let debounceTimer = null;
       const DEBOUNCE_MS = 80; // 批量更新，减少渲染次数
 
-      // 流式渲染时只显示完整行，缓冲最后一行（可能包含未完成的 heading）
-      // 流结束时显示全部内容
-      const flushStreaming = (force = false) => {
+      const flushStreaming = () => {
         if (debounceTimer) {
           clearTimeout(debounceTimer);
           debounceTimer = null;
         }
-        let displayContent;
-        if (force || streamEnded) {
-          displayContent = fullContent;
-        } else {
-          // 找到最后一个换行符，只显示完整行，缓冲不完整的最后一行
-          const lastNewline = fullContent.lastIndexOf('\n');
-          displayContent = lastNewline <= 0 ? '' : fullContent.slice(0, lastNewline + 1);
-        }
-        set({ streamingContent: displayContent });
+        set({ streamingContent: fullContent });
       };
 
       const scheduleStreamingFlush = () => {
         if (debounceTimer) return;
-        debounceTimer = setTimeout(() => flushStreaming(false), DEBOUNCE_MS);
+        debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
       };
 
       const handleEvent = (data) => {
         if (data === '[DONE]') {
           streamEnded = true;
-          flushStreaming(true); // 强制刷新全部内容
+          flushStreaming(); // 刷新全部内容
           return;
         }
         if (data.startsWith('[SESSION_ID:')) {
