@@ -104,14 +104,10 @@ const useStore = create((set, get) => ({
       let debounceTimer = null;
       const DEBOUNCE_MS = 80; // 批量更新，减少渲染次数
 
-      // 判断内容末尾是否可能是未完成的 Markdown 结构
-      const isIncompleteMarkdown = (text) => {
-        if (!text) return false;
-        // 不以换行结尾 → 行未完整
-        if (!text.endsWith('\n')) return true;
-        // 检查最后一行是否是孤立的 heading 标记（如 ###、#### 无标题）
-        const lastLine = text.split('\n').pop();
-        return /^#{1,6}$/.test(lastLine.trim());
+      // 流式渲染时转义不完整的 heading 标记，防止出现原始 # 符号
+      // 匹配行首的 # 标记，如果后面没有紧跟着"空格+非空格内容"（即不完整的 heading）
+      const escapeIncompleteHeadings = (text) => {
+        return text.replace(/^(#{1,6})(?!\s+\S)/gm, '\\$1');
       };
 
       const flushStreaming = (force = false) => {
@@ -119,10 +115,10 @@ const useStore = create((set, get) => ({
           clearTimeout(debounceTimer);
           debounceTimer = null;
         }
-        // 强制刷新（流结束）或内容完整时显示全部，否则只显示完整行
-        const displayContent = force || streamEnded || !isIncompleteMarkdown(fullContent)
+        // 流结束时显示原始内容，流式中转义不完整的 heading
+        const displayContent = force || streamEnded
             ? fullContent
-            : fullContent.slice(0, fullContent.lastIndexOf('\n') + 1);
+            : escapeIncompleteHeadings(fullContent);
         set({ streamingContent: displayContent });
       };
 
