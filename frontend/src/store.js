@@ -36,7 +36,7 @@ const useStore = create((set, get) => ({
     try {
       const res = await fetch(`/api/sessions/${id}`);
       const session = await res.json();
-      set({ currentSessionId: id, messages: session.messages || [] });
+      set({ currentSessionId: id, messages: session.messages || [], selectedDomain: null, domainContent: '' });
     } catch (e) {
       console.error('Failed to load session', e);
     }
@@ -57,6 +57,8 @@ const useStore = create((set, get) => ({
       currentSessionId: null,
       messages: [],
       streamingContent: '',
+      selectedDomain: null,
+      domainContent: '',
     });
   },
 
@@ -230,7 +232,7 @@ const useStore = create((set, get) => ({
   },
 
   clearDomainView: () => set({ selectedDomain: null, domainContent: '' }),
-  setSidebarTab: (tab) => set({ sidebarTab: tab }),
+  setSidebarTab: (tab) => set({ sidebarTab: tab, selectedDomain: null, domainContent: '' }),
 }));
 
 export default useStore;
