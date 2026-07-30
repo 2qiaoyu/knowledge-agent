@@ -14,10 +14,12 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,10 +43,17 @@ public class SimpleOpenAiChatModel implements ChatModel {
         this.apiKey = apiKey;
         this.model = model;
         this.temperature = temperature;
+
+        // 配置超时：连接超时 10s，读取超时 120s（LLM 生成可能需要较长时间）
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(120));
+
         this.restClient = RestClient.builder()
                 .baseUrl(this.baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Content-Type", "application/json")
+                .requestFactory(requestFactory)
                 .build();
     }
 
