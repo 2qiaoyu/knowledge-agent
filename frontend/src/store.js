@@ -103,9 +103,25 @@ const useStore = create((set, get) => ({
       let streamEnded = false;
       let flushScheduled = false;
 
+      // 缓冲最后一行不完整的内容，避免流式渲染时出现原始 Markdown 符号（如 ##）
+      let lineBuffer = '';
+
+      const getDisplayContent = () => {
+        // 找到最后一个换行符，只显示完整行，缓冲不完整的最后一行
+        const lastNewline = fullContent.lastIndexOf('\n');
+        if (lastNewline === -1) {
+          lineBuffer = fullContent;
+          return '';
+        }
+        lineBuffer = fullContent.slice(lastNewline + 1);
+        return fullContent.slice(0, lastNewline + 1);
+      };
+
       const flushStreaming = () => {
         flushScheduled = false;
-        set({ streamingContent: fullContent });
+        // 流式结束时显示全部内容（包含不完整的最后一行），否则只显示完整行
+        const displayContent = streamEnded ? fullContent : getDisplayContent();
+        set({ streamingContent: displayContent });
       };
 
       const scheduleStreamingFlush = () => {
@@ -117,6 +133,8 @@ const useStore = create((set, get) => ({
       const handleEvent = (data) => {
         if (data === '[DONE]') {
           streamEnded = true;
+          // 立即刷新，确保不完整的最后一行也被渲染
+          set({ streamingContent: fullContent });
           return;
         }
         if (data.startsWith('[SESSION_ID:')) {
