@@ -51,7 +51,9 @@ export default function Sidebar() {
                   className="btn-delete"
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteSession(s.id);
+                    if (window.confirm(`确定删除对话「${s.title}」？`)) {
+                      deleteSession(s.id);
+                    }
                   }}
                 >
                   x
