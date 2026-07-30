@@ -11,10 +11,22 @@ export default function ChatContainer() {
   const selectedDomain = useStore((s) => s.selectedDomain);
   const domainContent = useStore((s) => s.domainContent);
   const bottomRef = useRef(null);
+  const messagesAreaRef = useRef(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    const el = messagesAreaRef.current;
+    if (!el) return;
+    // 流式输出时使用即时滚动（无动画），避免平滑滚动导致的抖动
+    // 仅在用户已接近底部时才自动滚动
+    if (streaming) {
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+      if (isNearBottom) {
+        bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+      }
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, streamingContent, streaming]);
 
   // Show knowledge domain content if selected
   if (selectedDomain) {
@@ -38,7 +50,7 @@ export default function ChatContainer() {
 
   return (
     <main className="chat-container">
-      <div className="messages-area">
+      <div className="messages-area" ref={messagesAreaRef}>
         {messages.length === 0 && !streaming && (
           <div className="welcome">
             <h1>个人知识库助手</h1>

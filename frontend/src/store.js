@@ -101,40 +101,40 @@ const useStore = create((set, get) => ({
       let fullContent = '';
 
       let streamEnded = false;
-      let flushScheduled = false;
+      let debounceTimer = null;
+      const DEBOUNCE_MS = 80; // 批量更新，减少渲染次数
 
-      // 缓冲最后一行不完整的内容，避免流式渲染时出现原始 Markdown 符号（如 ##）
-      let lineBuffer = '';
-
-      const getDisplayContent = () => {
-        // 找到最后一个换行符，只显示完整行，缓冲不完整的最后一行
-        const lastNewline = fullContent.lastIndexOf('\n');
-        if (lastNewline === -1) {
-          lineBuffer = fullContent;
-          return '';
-        }
-        lineBuffer = fullContent.slice(lastNewline + 1);
-        return fullContent.slice(0, lastNewline + 1);
+      // 判断内容末尾是否可能是未完成的 Markdown 结构
+      const isIncompleteMarkdown = (text) => {
+        if (!text) return false;
+        // 不以换行结尾 → 行未完整
+        if (!text.endsWith('\n')) return true;
+        // 检查最后一行是否是孤立的 heading 标记（如 ###、#### 无标题）
+        const lastLine = text.split('\n').pop();
+        return /^#{1,6}$/.test(lastLine.trim());
       };
 
-      const flushStreaming = () => {
-        flushScheduled = false;
-        // 流式结束时显示全部内容（包含不完整的最后一行），否则只显示完整行
-        const displayContent = streamEnded ? fullContent : getDisplayContent();
+      const flushStreaming = (force = false) => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+        // 强制刷新（流结束）或内容完整时显示全部，否则只显示完整行
+        const displayContent = force || streamEnded || !isIncompleteMarkdown(fullContent)
+            ? fullContent
+            : fullContent.slice(0, fullContent.lastIndexOf('\n') + 1);
         set({ streamingContent: displayContent });
       };
 
       const scheduleStreamingFlush = () => {
-        if (flushScheduled) return;
-        flushScheduled = true;
-        requestAnimationFrame(flushStreaming);
+        if (debounceTimer) return;
+        debounceTimer = setTimeout(() => flushStreaming(false), DEBOUNCE_MS);
       };
 
       const handleEvent = (data) => {
         if (data === '[DONE]') {
           streamEnded = true;
-          // 立即刷新，确保不完整的最后一行也被渲染
-          set({ streamingContent: fullContent });
+          flushStreaming(true); // 强制刷新全部内容
           return;
         }
         if (data.startsWith('[SESSION_ID:')) {
