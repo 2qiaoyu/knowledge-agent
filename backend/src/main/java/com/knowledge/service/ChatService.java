@@ -101,13 +101,10 @@ public class ChatService {
         // 构建提示词并调用LLM获取流式响应
         return buildPrompt(request)
                 .flatMapMany(prompt -> {
-                    log.debug("Querying LLM with prompt: {}", prompt);
-                    // 注意：MessageChatMemoryAdvisor 需要 conversationId，
-                    // 但 SimpleOpenAiChatModel 不自动设置 observation context。
-                    // 对于 LongCat，我们不使用记忆功能（因为它是无状态的），
-                    // 对于 DeepSeek，Spring AI 会自动设置 observation context。
+                    log.debug("Querying LLM with system prompt: {}\nuser prompt: {}", prompt.system(), prompt.user());
                     return client.prompt()
-                            .user(prompt)
+                            .system(prompt.system())
+                            .user(prompt.user())
                             .stream()
                             .content();
                 })
@@ -126,38 +123,40 @@ public class ChatService {
 // ... existing code ...
 
 
-    private Mono<String> buildPrompt(ChatRequest request) {
-        return Mono.fromCallable(() -> {
-                    StringBuilder systemPrompt = new StringBuilder();
-                    systemPrompt.append("你是一个个人知识库助手。请用中文回答问题，帮助用户构建知识体系。\n");
-                    systemPrompt.append("回答应清晰、结构化，使用Markdown格式。\n");
+    private Mono<Prompt> buildPrompt(ChatRequest request) {
+        String systemPrompt = "你是一个个人知识库助手，擅长基于搜索结果回答问题。\n" +
+                "回答规则：\n" +
+                "1. 优先依据提供的搜索结果回答问题，搜索结果的知识优先于你自身的参数知识\n" +
+                "2. 如果搜索结果不足以回答问题，请明确说明「搜索结果中未找到足够信息」\n" +
+                "3. 回答应清晰、结构化，使用 Markdown 格式\n" +
+                "4. 在答案末尾标注引用来源（使用搜索结果中的编号）\n" +
+                "5. 用中文回答\n";
 
-                    // Retrieve relevant past knowledge from Chroma (blocking)
-//                    String pastContext = knowledgeService.retrieveContext(request.getMessage(), 3);
-//                    if (!pastContext.isEmpty()) {
-//                        systemPrompt.append(pastContext);
-//                    }
-                    systemPrompt.append(request.getMessage());
-                    return systemPrompt.toString();
-                })
+        return Mono.fromCallable(request::getMessage)
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(systemPrompt -> {
+                .flatMap(question -> {
                     if (request.isEnableWebSearch()) {
-                        return webSearchService.search(request.getMessage())
+                        return webSearchService.search(question)
                                 .map(searchResult -> {
-                                    String prompt = systemPrompt;
+                                    String userPrompt;
                                     if (!searchResult.isEmpty()) {
                                         log.debug("Search result: {}", searchResult);
-                                        prompt += searchResult.formatForPrompt();
+                                        userPrompt = searchResult.formatForPrompt() +
+                                                "\n\n## 问题\n\n" + question +
+                                                "\n\n请根据以上搜索结果回答问题。";
+                                    } else {
+                                        userPrompt = question;
                                     }
-                                    return prompt;
+                                    return new Prompt(systemPrompt, userPrompt);
                                 })
-                                .defaultIfEmpty(systemPrompt);
+                                .defaultIfEmpty(new Prompt(systemPrompt, question));
                     }
 
-                    return Mono.just(systemPrompt);
+                    return Mono.just(new Prompt(systemPrompt, question));
                 });
     }
+
+    private record Prompt(String system, String user) {}
 
     private void saveAnswer(String sessionId, String question, String answer, ChatRequest request) {
         String domain = request.getDomain();

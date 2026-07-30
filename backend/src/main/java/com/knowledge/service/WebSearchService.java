@@ -1,179 +1,128 @@
 package com.knowledge.service;
 
 import com.knowledge.model.ChatMessage.Citation;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Web search service supporting multiple providers.
+ * Web search service using Serper.dev (Google Search results).
  *
- * Providers:
- * - searxng: Local SearXNG instance (recommended) - JSON API, no CAPTCHA
- * - duckduckgo: DuckDuckGo HTML scraping (may need proxy + may trigger CAPTCHA)
+ * Serper.dev provides Google Search results via a simple JSON API.
+ * Free tier: 2,500 queries/month. No credit card required for free plan.
+ * Sign up at: https://serper.dev
  *
- * Proxy: Configure websearch.proxy.* when behind a firewall/VPN (e.g. Clash, Surge).
+ * API docs: https://serper.dev/docs
  */
 @Service
 public class WebSearchService {
 
     private static final Logger log = LoggerFactory.getLogger(WebSearchService.class);
+    private static final String SERPER_API_URL = "https://google.serper.dev/search";
 
-    private final String provider;
-    private final String ddgUrl;
-    private final String searxngUrl;
-    private final boolean proxyEnabled;
-    private final String proxyHost;
-    private final int proxyPort;
-
+    private final String apiKey;
     private final WebClient webClient;
 
     public WebSearchService(
-            @Value("${websearch.provider:searxng}") String provider,
-            @Value("${websearch.searxng.url:http://localhost:8081}") String searxngUrl,
-            @Value("${websearch.duckduckgo.url:https://html.duckduckgo.com/html/}") String ddgUrl,
-            @Value("${websearch.proxy.enabled:false}") boolean proxyEnabled,
-            @Value("${websearch.proxy.host:127.0.0.1}") String proxyHost,
-            @Value("${websearch.proxy.port:7897}") int proxyPort) {
-        this.provider = provider;
-        this.searxngUrl = searxngUrl;
-        this.ddgUrl = ddgUrl;
-        this.proxyEnabled = proxyEnabled;
-        this.proxyHost = proxyHost;
-        this.proxyPort = proxyPort;
+            @Value("${websearch.serper.api-key:}") String apiKey) {
+        this.apiKey = apiKey;
         this.webClient = WebClient.builder()
                 .codecs(config -> config.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
                 .build();
-        log.info("WebSearchService initialized: provider={}, proxy={}:{} (enabled={})",
-                provider, proxyHost, proxyPort, proxyEnabled);
+        if (apiKey != null && !apiKey.isBlank()) {
+            log.info("WebSearchService initialized with Serper.dev (free tier: 2500 queries/month)");
+        } else {
+            log.warn("WebSearchService: Serper.dev API key not configured. Web search will be disabled.");
+        }
     }
 
     /**
      * Search the web and return formatted results.
      */
     public Mono<SearchResult> search(String query) {
-        return switch (provider) {
-            case "searxng" -> searchSearXNG(query);
-            case "duckduckgo" -> searchDuckDuckGo(query);
-            default -> {
-                log.warn("Unknown search provider: {}, falling back to searxng", provider);
-                yield searchSearXNG(query);
-            }
-        };
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("Serper.dev API key not set, skipping search");
+            return Mono.just(SearchResult.empty());
+        }
+        return searchSerper(query);
     }
 
-    // ---- SearXNG (JSON API) ----
-
-    private Mono<SearchResult> searchSearXNG(String query) {
-        return webClient.get()
-                .uri(searxngUrl + "/search?format=json&q=" + URLEncoder.encode(query, StandardCharsets.UTF_8))
-                .retrieve()
-                .bodyToMono(Map.class)
-                .timeout(Duration.ofSeconds(10))
-                .map(response -> parseSearXNGResponse(query, response))
-                .onErrorResume(e -> {
-                    log.warn("SearXNG search failed: {} (is searxng container running? try: docker-compose up -d searxng)", e.getMessage());
-                    log.info("Falling back to DuckDuckGo...");
-                    return searchDuckDuckGo(query);
-                });
-    }
+    // ---- Serper.dev (Google Search API) ----
 
     @SuppressWarnings("unchecked")
-    private SearchResult parseSearXNGResponse(String query, Map<String, Object> response) {
-        List<Citation> citations = new ArrayList<>();
-        List<Map<String, Object>> results = (List<Map<String, Object>>) response.getOrDefault("results", List.of());
-
-        for (Map<String, Object> r : results) {
-            String title = (String) r.getOrDefault("title", "");
-            String url = (String) r.getOrDefault("url", "");
-            String snippet = (String) r.getOrDefault("content", "");
-            if (snippet == null || snippet.isBlank()) {
-                snippet = (String) r.getOrDefault("snippet", "");
-            }
-
-            if (!title.isBlank() && !url.isBlank()) {
-                citations.add(Citation.builder()
-                        .title(title)
-                        .url(url)
-                        .snippet(snippet != null ? snippet : "")
-                        .build());
-            }
-
-            if (citations.size() >= 5) break;
-        }
-
-        log.debug("SearXNG returned {} results for query", citations.size());
-        return new SearchResult(query, citations);
-    }
-
-    // ---- DuckDuckGo (HTML scraping) ----
-
-    private Mono<SearchResult> searchDuckDuckGo(String query) {
-        return Mono.fromCallable(() -> doDuckDuckGoSearch(query))
-                .subscribeOn(Schedulers.boundedElastic())
+    private Mono<SearchResult> searchSerper(String query) {
+        return webClient.post()
+                .uri(SERPER_API_URL)
+                .header("X-API-KEY", apiKey)
+                .bodyValue(Map.of(
+                        "q", query,
+                        "gl", "cn",
+                        "hl", "zh-cn"
+                ))
+                .retrieve()
+                .bodyToMono(Map.class)
+                .timeout(Duration.ofSeconds(15))
+                .map(response -> parseSerperResponse(query, response))
                 .onErrorResume(e -> {
-                    log.warn("DuckDuckGo search failed: {}", e.getMessage());
+                    log.warn("Serper.dev search failed: {}", e.getMessage());
                     return Mono.just(SearchResult.empty());
                 });
     }
 
-    private SearchResult doDuckDuckGoSearch(String query) throws Exception {
-        String url = ddgUrl + "?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
-
-        var connection = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .timeout(10000);
-
-        // Configure proxy if enabled
-        if (proxyEnabled) {
-            connection.proxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort)));
-            log.debug("Using proxy {}:{} for DuckDuckGo", proxyHost, proxyPort);
-        }
-
-        Document doc = connection.get();
-
+    @SuppressWarnings("unchecked")
+    private SearchResult parseSerperResponse(String query, Map<String, Object> response) {
         List<Citation> citations = new ArrayList<>();
-        for (Element result : doc.select(".result")) {
-            Element link = result.selectFirst(".result__a");
-            Element snippet = result.selectFirst(".result__snippet");
-            if (link == null) continue;
 
-            String title = link.text();
-            String href = link.attr("href");
-            // DuckDuckGo wraps URLs in a redirect; extract the real URL
-            if (href != null && href.contains("uddg=")) {
-                href = java.net.URLDecoder.decode(
-                        href.replaceAll(".*uddg=", "").replaceAll("&.*", ""),
-                        StandardCharsets.UTF_8
-                );
+        // Parse organic results
+        List<Map<String, Object>> organic = (List<Map<String, Object>>) response.getOrDefault("organic", List.of());
+        for (Map<String, Object> r : organic) {
+            String title = (String) r.getOrDefault("title", "");
+            String link = (String) r.getOrDefault("link", "");
+            String snippet = (String) r.getOrDefault("snippet", "");
+
+            if (!title.isBlank() && !link.isBlank()) {
+                citations.add(Citation.builder()
+                        .title(title)
+                        .url(link)
+                        .snippet(snippet != null ? snippet : "")
+                        .build());
             }
 
-            citations.add(Citation.builder()
-                    .title(title)
-                    .url(href != null ? href : "")
-                    .snippet(snippet != null ? snippet.text() : "")
-                    .build());
-
-            if (citations.size() >= 5) break;
+            if (citations.size() >= 8) break;
         }
 
-        log.debug("DuckDuckGo search returned {} results for: {}", citations.size(), query);
+        // If no organic results, try answerBox
+        if (citations.isEmpty()) {
+            Map<String, Object> answerBox = (Map<String, Object>) response.get("answerBox");
+            if (answerBox != null) {
+                String title = (String) answerBox.getOrDefault("title", "");
+                String answer = (String) answerBox.getOrDefault("answer", "");
+                String snippet = (String) answerBox.getOrDefault("snippet", "");
+                if (answer != null && !answer.isBlank()) {
+                    citations.add(Citation.builder()
+                            .title(title.isBlank() ? "Featured Answer" : title)
+                            .url((String) answerBox.getOrDefault("link", ""))
+                            .snippet(answer)
+                            .build());
+                } else if (snippet != null && !snippet.isBlank()) {
+                    citations.add(Citation.builder()
+                            .title(title.isBlank() ? "Featured Snippet" : title)
+                            .url((String) answerBox.getOrDefault("link", ""))
+                            .snippet(snippet)
+                            .build());
+                }
+            }
+        }
+
+        log.debug("Serper.dev returned {} results for query: {}", citations.size(), query);
         return new SearchResult(query, citations);
     }
 
@@ -191,7 +140,7 @@ public class WebSearchService {
         public String formatForPrompt() {
             if (isEmpty()) return "";
             StringBuilder sb = new StringBuilder();
-            sb.append("\n\n## 搜索结果\n\n");
+            sb.append("## 搜索结果\n\n");
             for (int i = 0; i < citations.size(); i++) {
                 Citation c = citations.get(i);
                 sb.append("**").append(i + 1).append(".** [")
@@ -200,7 +149,6 @@ public class WebSearchService {
                     sb.append("> ").append(c.getSnippet()).append("\n\n");
                 }
             }
-            sb.append("\n请根据以上搜索结果回答问题，并在答案末尾标注引用来源。\n");
             return sb.toString();
         }
     }

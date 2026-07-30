@@ -11,7 +11,7 @@
 | 对话模型 | DeepSeek Chat (默认) / LongCat (美团, 可切换) |
 | 向量嵌入 | Ollama (nomic-embed-text, 本地运行) |
 | 向量数据库 | Chroma DB |
-| 联网搜索 | SearXNG (推荐) / DuckDuckGo (备用) |
+| 联网搜索 | Serper.dev (Google Search API, 免费 2500 次/月) |
 
 ## 架构
 
@@ -25,7 +25,7 @@
 │                Backend (Java 21 + Spring Boot 4.1)        │
 │                                                          │
 │  ChatController → ChatService                           │
-│     ├── WebSearchService   (SearXNG / DuckDuckGo)       │
+│     ├── WebSearchService   (Serper.dev Google Search)    │
 │     ├── ChatClient         (DeepSeek via Spring AI)     │
 │     ├── KnowledgeService   (Markdown + Chroma)          │
 │     └── SessionService     (会话上下文)                  │
@@ -133,7 +133,7 @@ cp .env.example .env
 DEEPSEEK_API_KEY=sk-your-deepseek-api-key   # DeepSeek API Key
 ```
 
-联网搜索默认使用 SearXNG（本地 Docker 实例），也可切换为 DuckDuckGo。详见 `.env` 配置。
+联网搜索使用 Serper.dev（Google Search API），需在 `.env` 中配置 `SERPER_API_KEY`。注册获取 Key：https://serper.dev（免费额度 2500 次/月）。
 
 ### 5. 启动后端
 

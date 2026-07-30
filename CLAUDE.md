@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 常用命令
 
 ```bash
-# 启动基础设施 (Chroma + SearXNG)
+# 启动基础设施 (Chroma)
 docker-compose up -d
 
 # 后端 (Java 21, Spring Boot 4.1)
@@ -34,7 +34,7 @@ npm run build                # 生产构建
 | LLM | DeepSeek Chat (OpenAI 兼容协议, 通过 Spring AI OpenAI starter) |
 | 向量嵌入 | Ollama (nomic-embed-text, 本地) |
 | 向量数据库 | Chroma DB (Docker) |
-| 搜索 | SearXNG (Docker, 聚合多引擎) / DuckDuckGo HTML 抓取 (备用) |
+| 搜索 | Serper.dev (Google Search API, 免费 2500 次/月) |
 | Markdown 渲染 | streamdown + @streamdown/code (Shiki 语法高亮) |
 
 ## 架构
@@ -44,7 +44,7 @@ npm run build                # 生产构建
 ```
 用户提问 → ChatController (SSE 流式)
   → ChatService.buildPrompt()
-    → [可选] WebSearchService.search() → SearXNG (localhost:8081) 或 DuckDuckGo
+    → [可选] WebSearchService.search() → Serper.dev (Google Search API)
     → [可选] KnowledgeService.retrieveContext() → Chroma 向量检索
   → ChatClient (DeepSeek via Spring AI) → 流式生成
   → ChatService.saveAnswer() → KnowledgeService.classifyDomainWithLlm() → LLM 分类到知识域
@@ -60,7 +60,7 @@ npm run build                # 生产构建
   - `ProviderController` — `/api/providers` (获取可用 LLM 供应商)
 - **service/** — 业务逻辑
   - `ChatService` — 核心编排：提示词构建、流式调用 LLM、异步保存知识
-  - `WebSearchService` — 多搜索提供商：SearXNG (JSON API) 优先，DuckDuckGo (Jsoup HTML 抓取) 备用，支持 HTTP 代理
+  - `WebSearchService` — Serper.dev Google Search API，返回有机搜索结果 + AnswerBox
   - `KnowledgeService` — Markdown 文件读写 + Chroma 向量索引/检索 + LLM 知识域分类
   - `SessionService` — 会话 CRUD，持久化到 `data/sessions.json`
 - **model/** — DTO: `ChatRequest`, `ChatMessage`, `Session`
@@ -81,11 +81,14 @@ npm run build                # 生产构建
 
 ### 联网搜索
 
-SearXNG 是主要搜索方式，运行在 Docker 中：
-- 通过 `host.docker.internal:7897` 代理访问上游搜索引擎（适配 Clash/Surge 等代理工具）
-- 配置：`searxng/settings.yml`（搜索引擎列表、代理）、`searxng/limiter.toml`（禁用 bot detection）
-- Java 后端通过 `WebClient` 调 `localhost:8081/search?format=json`，失败时自动回退到 DuckDuckGo
-- 搜索配置通过环境变量控制：`WEBSEARCH_PROVIDER`, `SEARXNG_URL`, `PROXY_ENABLED`, `PROXY_HOST`, `PROXY_PORT`
+使用 Serper.dev 作为搜索提供商（Google Search 结果）：
+- **API**: `POST https://google.serper.dev/search`，Header `X-API-KEY`
+- **参数**: `gl=cn, hl=zh-cn`（中文语境）
+- **免费额度**: 2,500 次/月，注册获取 API Key：https://serper.dev
+- **结果解析**: `organic[]` 数组（title + link + snippet），`organic` 为空时提取 `answerBox`
+- **环境变量**: `SERPER_API_KEY`（必填，搜索功能启用前提）
+
+提示词策略：搜索结果放在问题之前，system 消息明确指令"搜索结果优先于自身知识"，信息不足时要求说明。
 
 ### 数据存储
 
@@ -155,6 +158,6 @@ llm:
 ### 关键配置
 
 - `backend/src/main/resources/application.yml` — Spring AI、Chroma、Ollama、WebSearch、LLM 供应商配置
-- `.env` — `DEEPSEEK_API_KEY`（必填）、`LONGCAT_API_KEY`（可选）、搜索提供商、代理设置
+- `.env` — `DEEPSEEK_API_KEY`（必填）、`LONGCAT_API_KEY`（可选）、`SERPER_API_KEY`（搜索必填）
 - `frontend/vite.config.js` — 开发端口 3000，`/api` 代理到 `localhost:8080`
-- `docker-compose.yml` — Chroma (8000) + SearXNG (8081)
+- `docker-compose.yml` — Chroma (8000)
