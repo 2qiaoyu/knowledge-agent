@@ -102,7 +102,7 @@ const useStore = create((set, get) => ({
 
       let streamEnded = false;
       let debounceTimer = null;
-      const DEBOUNCE_MS = 80; // 批量更新，减少渲染次数
+      const DEBOUNCE_MS = 40; // react-markdown 渲染更快，使用更短的 debounce
 
       const flushStreaming = () => {
         if (debounceTimer) {

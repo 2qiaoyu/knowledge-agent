@@ -1,33 +1,75 @@
 import React from 'react';
-import { Streamdown } from 'streamdown';
-import { code } from '@streamdown/code';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { fixIncompleteMarkdown } from '../utils/streamingMarkdown';
 
-const plugins = { code };
-
+/**
+ * MarkdownViewer - 支持流式渲染的 Markdown 组件
+ *
+ * 特性：
+ * - 使用 react-markdown 渲染 Markdown
+ * - 流式输出时自动修复未闭合的 Markdown 标记
+ * - 支持 GFM（表格、删除线、任务列表）
+ * - 代码块使用 react-syntax-highlighter 高亮
+ */
 export default function MarkdownViewer({ content, streaming = false }) {
   if (!content) {
     return null;
   }
 
-  // 流式渲染时使用纯文本，避免不完整的 Markdown（如 ##）被渲染成原始符号
-  // 流结束后切换为 streamdown 渲染完整 Markdown
-  if (streaming) {
-    return (
-      <div className="streamdown-message whitespace-pre-wrap break-words">
-        {content}
-      </div>
-    );
-  }
+  // 流式输出时修复未闭合的 Markdown 标记
+  const processedContent = streaming ? fixIncompleteMarkdown(content) : content;
 
   return (
-    <Streamdown
-      className="streamdown-message"
-      mode="static"
-      plugins={plugins}
-      shikiTheme={['github-light', 'github-light']}
-      lineNumbers
-    >
-      {content}
-    </Streamdown>
+    <div className="markdown-body">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ node, inline, className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+
+            if (inline) {
+              return (
+                <code className="inline-code" {...props}>
+                  {children}
+                </code>
+              );
+            }
+
+            return (
+              <div className="code-block-wrapper">
+                {language && (
+                  <div className="code-block-header">
+                    <span className="code-block-lang">{language}</span>
+                  </div>
+                )}
+                <SyntaxHighlighter
+                  style={oneLight}
+                  language={language || 'text'}
+                  PreTag="div"
+                  customStyle={{
+                    margin: 0,
+                    borderRadius: language ? '0 0 8px 8px' : '8px',
+                    fontSize: '14px',
+                    lineHeight: '1.6',
+                  }}
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              </div>
+            );
+          },
+          table({ children }) {
+            return <table className="markdown-table">{children}</table>;
+          },
+        }}
+      >
+        {processedContent}
+      </ReactMarkdown>
+    </div>
   );
 }

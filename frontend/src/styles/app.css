@@ -1,8 +1,5 @@
 @import "tailwindcss";
 
-@source "../../node_modules/streamdown/dist/*.js";
-@source "../../node_modules/@streamdown/code/dist/*.js";
-
 * {
   margin: 0;
   padding: 0;
@@ -10,7 +7,6 @@
 }
 
 :root {
-  /* Streamdown / shadcn design tokens (light theme) */
   --background: #ffffff;
   --foreground: #1a1a1a;
   --card: #ffffff;
@@ -32,7 +28,6 @@
   --accent: #2563eb;
   --accent-dim: #3b82f6;
   --danger: #ef4444;
-  --border: #e5e7eb;
   --msg-user: #eff6ff;
   --msg-assistant: #ffffff;
 }
@@ -243,70 +238,205 @@ html, body, #root {
   line-height: 1.65;
 }
 
-.message-content h1 { font-size: 1.5em; margin: 0.67em 0; }
-.message-content h2 { font-size: 1.3em; margin: 0.75em 0 0.5em; }
-.message-content h3 { font-size: 1.15em; margin: 0.6em 0 0.4em; }
-.message-content p { margin: 0.5em 0; }
-.message-content ul, .message-content ol { padding-left: 1.5em; margin: 0.5em 0; }
-.message-content li { margin: 0.25em 0; }
-.message-content code {
+/* Markdown Body Styles (react-markdown) */
+.markdown-body {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  word-wrap: break-word;
+}
+
+.markdown-body h1 {
+  font-size: 1.5em;
+  margin: 0.67em 0;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.markdown-body h2 {
+  font-size: 1.3em;
+  margin: 0.75em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.markdown-body h3 {
+  font-size: 1.15em;
+  margin: 0.6em 0 0.4em;
+  font-weight: 600;
+}
+
+.markdown-body h4 {
+  font-size: 1.05em;
+  margin: 0.5em 0 0.3em;
+  font-weight: 600;
+}
+
+.markdown-body p {
+  margin: 0.5em 0;
+}
+
+.markdown-body ul, .markdown-body ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.markdown-body li {
+  margin: 0.25em 0;
+}
+
+/* Task list (GFM) */
+.markdown-body ul:has(> li > input[type="checkbox"]) {
+  list-style: none;
+  padding-left: 1.2em;
+}
+
+.markdown-body li > input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--accent);
+}
+
+/* Inline code */
+.markdown-body .inline-code,
+.markdown-body code:not(pre code) {
   background: #f1f5f9;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
   color: #db2777;
   border: 1px solid #e2e8f0;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 }
-.message-content pre {
-  padding: 14px;
-  border-radius: 8px;
-  overflow-x: auto;
+
+/* Code block wrapper */
+.markdown-body .code-block-wrapper {
   margin: 0.8em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
 }
-/* Streamdown code block container */
-.message-content [data-streamdown="code-block"] {
-  border-left: 3px solid var(--accent) !important;
-  background: #f8fafc !important;
+
+.markdown-body .code-block-header {
+  background: #f1f5f9;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
 }
-.message-content [data-streamdown="code-block-body"] {
-  background: transparent;
+
+.markdown-body .code-block-lang {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
-.message-content blockquote {
+
+.markdown-body pre {
+  margin: 0 !important;
+  padding: 14px !important;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  border: none;
+  color: inherit;
+  font-size: 14px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+}
+
+/* Blockquote */
+.markdown-body blockquote {
   border-left: 3px solid var(--accent-dim);
   padding-left: 12px;
   color: var(--text-secondary);
   margin: 0.5em 0;
 }
-.message-content a {
+
+.markdown-body blockquote p {
+  margin: 0.3em 0;
+}
+
+/* Links */
+.markdown-body a {
   color: var(--accent);
   text-decoration: none;
 }
-.message-content a:hover {
+
+.markdown-body a:hover {
   text-decoration: underline;
 }
-.message-content table {
+
+/* Table (GFM) */
+.markdown-body .markdown-table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.5em 0;
+  font-size: 0.95em;
 }
-.message-content th, .message-content td {
+
+.markdown-body .markdown-table th,
+.markdown-body .markdown-table td {
   border: 1px solid var(--border);
   padding: 8px 12px;
   text-align: left;
 }
-.message-content th {
+
+.markdown-body .markdown-table th {
   background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.markdown-body .markdown-table tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* Strikethrough (GFM) */
+.markdown-body del {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+/* Horizontal rule */
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+/* Strong / Bold */
+.markdown-body strong {
+  font-weight: 700;
+}
+
+/* Emphasis / Italic */
+.markdown-body em {
+  font-style: italic;
 }
 
 /* Streaming message */
 .message.streaming {
-  opacity: 0.95;
+  opacity: 0.97;
 }
 
-.message-content .streamdown-message {
-  font-size: inherit;
-  line-height: inherit;
-  color: inherit;
+.message.streaming .markdown-body {
+  /* 流式输出时启用 pre-wrap 以保留空白和换行 */
+  white-space: normal;
+}
+
+/* Streaming cursor indicator */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.message.streaming .markdown-body::after {
+  content: '▊';
+  display: inline;
+  color: var(--accent);
+  animation: blink 1s infinite;
+  font-weight: 300;
+  margin-left: 1px;
 }
 
 /* Chat Input */
@@ -382,6 +512,20 @@ html, body, #root {
 
 .websearch-toggle input {
   accent-color: var(--accent);
+}
+
+.provider-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.provider-select:focus {
+  border-color: var(--accent);
 }
 
 /* Knowledge Viewer */
