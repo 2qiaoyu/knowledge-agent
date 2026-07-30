@@ -104,10 +104,10 @@ const useStore = create((set, get) => ({
       let debounceTimer = null;
       const DEBOUNCE_MS = 80; // 批量更新，减少渲染次数
 
-      // 流式渲染时转义不完整的 heading 标记，防止出现原始 # 符号
-      // 匹配行首的 # 标记，如果后面没有紧跟着"空格+非空格内容"（即不完整的 heading）
-      const escapeIncompleteHeadings = (text) => {
-        return text.replace(/^(#{1,6})(?!\s+\S)/gm, '\\$1');
+      // 流式渲染时转义所有 heading 标记，防止 streamdown 将未渲染完的 heading 显示为原始 # 符号
+      // 只在流结束时恢复正常渲染
+      const escapeHeadings = (text) => {
+        return text.replace(/^(#{1,6})(?=\s)/gm, '\\$1');
       };
 
       const flushStreaming = (force = false) => {
@@ -115,10 +115,10 @@ const useStore = create((set, get) => ({
           clearTimeout(debounceTimer);
           debounceTimer = null;
         }
-        // 流结束时显示原始内容，流式中转义不完整的 heading
+        // 流结束时显示原始内容，流式中转义所有 heading
         const displayContent = force || streamEnded
             ? fullContent
-            : escapeIncompleteHeadings(fullContent);
+            : escapeHeadings(fullContent);
         set({ streamingContent: displayContent });
       };
 
