@@ -162,7 +162,12 @@ public class ChatService {
     private void saveAnswer(String sessionId, String question, String answer, ChatRequest request) {
         String domain = request.getDomain();
         if (domain == null || domain.isBlank()) {
-            domain = knowledgeService.classifyDomain(question);
+            try {
+                domain = knowledgeService.classifyDomainWithLlm(question, answer);
+            } catch (Exception e) {
+                log.warn("LLM classification failed, falling back to vector similarity", e);
+                domain = knowledgeService.classifyDomain(question);
+            }
         }
 
         ChatMessage assistantMsg = ChatMessage.builder()

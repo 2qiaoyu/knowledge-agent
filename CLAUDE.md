@@ -47,6 +47,7 @@ npm run build                # 生产构建
     → [可选] WebSearchService.search() → SearXNG (localhost:8081) 或 DuckDuckGo
     → [可选] KnowledgeService.retrieveContext() → Chroma 向量检索
   → ChatClient (DeepSeek via Spring AI) → 流式生成
+  → ChatService.saveAnswer() → KnowledgeService.classifyDomainWithLlm() → LLM 分类到知识域
   → KnowledgeService.appendEntry() → Markdown 文件 + Chroma 索引
   → SessionService → data/sessions.json
 ```
@@ -60,7 +61,7 @@ npm run build                # 生产构建
 - **service/** — 业务逻辑
   - `ChatService` — 核心编排：提示词构建、流式调用 LLM、异步保存知识
   - `WebSearchService` — 多搜索提供商：SearXNG (JSON API) 优先，DuckDuckGo (Jsoup HTML 抓取) 备用，支持 HTTP 代理
-  - `KnowledgeService` — Markdown 文件读写 + Chroma 向量索引/检索
+  - `KnowledgeService` — Markdown 文件读写 + Chroma 向量索引/检索 + LLM 知识域分类
   - `SessionService` — 会话 CRUD，持久化到 `data/sessions.json`
 - **model/** — DTO: `ChatRequest`, `ChatMessage`, `Session`
 - **config/** — Spring AI 自动配置 + Jackson ObjectMapper 自定义 + 多 LLM 供应商 ChatClient 配置
@@ -92,6 +93,17 @@ SearXNG 是主要搜索方式，运行在 Docker 中：
 - `data/sessions.json` — 会话和消息历史
 - `data/chroma/` — Chroma 向量数据库持久化目录
 - 向量嵌入由 Ollama 本地生成 (`nomic-embed-text`)，无需外部 API
+
+### 知识域分类
+
+每次问答结束后，系统自动将内容分类到对应知识域（`KnowledgeService.classifyDomainWithLlm()`）：
+
+1. **LLM 智能分类**：将问答内容（问题 + 回答前 500 字）+ 现有知识域列表发送给 LLM，由其判断归入现有域或创建新域
+2. **新域命名**：LLM 返回 2-5 个中文字的简洁名称（如"前端开发"、"Python"、"机器学习"）
+3. **Fallback**：LLM 调用失败时回退到旧的向量相似度匹配（`classifyDomain()`，已废弃）
+4. **手动覆盖**：`ChatRequest.domain` 字段可指定知识域，跳过自动分类
+
+分类结果决定 Q&A 写入 `data/knowledge/{domain}.md` 的哪个文件。
 
 ### SSE 协议
 

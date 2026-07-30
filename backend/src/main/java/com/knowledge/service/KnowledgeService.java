@@ -4,6 +4,7 @@ import com.knowledge.model.ChatMessage;
 import com.knowledge.model.ChatMessage.Citation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -28,12 +29,15 @@ public class KnowledgeService {
 
     private final Path basePath;
     private final VectorStore vectorStore;
+    private final ChatClient chatClient;
 
     public KnowledgeService(
             @Value("${knowledge.base-path}") String basePath,
-            VectorStore vectorStore) {
+            VectorStore vectorStore,
+            ChatClient defaultChatClient) {
         this.basePath = Paths.get(basePath);
         this.vectorStore = vectorStore;
+        this.chatClient = defaultChatClient;
         try {
             Files.createDirectories(this.basePath);
         } catch (IOException e) {
@@ -42,8 +46,50 @@ public class KnowledgeService {
     }
 
     /**
-     * Find the best matching domain file for a question, or create a new one.
+     * Use LLM to classify a Q&A into an existing domain or suggest a new one.
      */
+    public String classifyDomainWithLlm(String question, String answer) {
+        List<String> existing = listDomains();
+
+        String existingList = existing.isEmpty() ? "（暂无）" : String.join(", ", existing);
+        String answerPreview = answer.length() > 500 ? answer.substring(0, 500) : answer;
+
+        String prompt = """
+                你是一个知识分类助手。根据以下问题和回答，判断它属于哪个知识域。
+
+                现有知识域：%s
+
+                问题：%s
+                回答：%s
+
+                规则：
+                1. 如果内容与某个现有知识域高度相关，返回该知识域名称
+                2. 如果是全新主题，创建一个新的知识域名称（2-5个中文字，简洁明确，如"前端开发""机器学习""Python"）
+                3. 只返回知识域名称，不要任何解释或标点
+
+                知识域名称：
+                """.formatted(existingList, question, answerPreview);
+
+        try {
+            String result = chatClient.prompt().user(prompt).call().content();
+            String domain = result != null ? result.trim() : "";
+            if (domain.isEmpty()) {
+                log.warn("LLM returned empty domain, falling back to 通用知识");
+                return "通用知识";
+            }
+            log.info("LLM classified Q&A into domain: {}", domain);
+            return domain;
+        } catch (Exception e) {
+            log.warn("LLM classification failed: {}", e.getMessage());
+            throw e;  // let caller handle fallback
+        }
+    }
+
+    /**
+     * Find the best matching domain file for a question, or create a new one.
+     * @deprecated Use {@link #classifyDomainWithLlm} for new content classification.
+     */
+    @Deprecated
     public String classifyDomain(String question) {
         List<String> existing = listDomains();
         if (existing.isEmpty()) {
