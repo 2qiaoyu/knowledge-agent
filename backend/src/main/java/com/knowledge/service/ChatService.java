@@ -102,9 +102,12 @@ public class ChatService {
         return buildPrompt(request)
                 .flatMapMany(prompt -> {
                     log.debug("Querying LLM with prompt: {}", prompt);
+                    // 注意：MessageChatMemoryAdvisor 需要 conversationId，
+                    // 但 SimpleOpenAiChatModel 不自动设置 observation context。
+                    // 对于 LongCat，我们不使用记忆功能（因为它是无状态的），
+                    // 对于 DeepSeek，Spring AI 会自动设置 observation context。
                     return client.prompt()
                             .user(prompt)
-                            .advisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                             .stream()
                             .content();
                 })
