@@ -19,28 +19,34 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
-    private static final Path STORE_PATH = Paths.get("data", "sessions.json");
+    private static final Path DEFAULT_storePath = Paths.get("data", "sessions.json");
 
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
+    private final Path storePath;
 
     public SessionService(ObjectMapper objectMapper) {
+        this(objectMapper, DEFAULT_storePath);
+    }
+
+    SessionService(ObjectMapper objectMapper, Path storePath) {
         this.objectMapper = objectMapper;
+        this.storePath = storePath;
     }
 
     @PostConstruct
     public void init() {
         try {
-            Files.createDirectories(STORE_PATH.getParent());
-            if (Files.exists(STORE_PATH)) {
-                String json = Files.readString(STORE_PATH);
+            Files.createDirectories(storePath.getParent());
+            if (Files.exists(storePath)) {
+                String json = Files.readString(storePath);
                 if (!json.isBlank()) {
                     List<Session> list = objectMapper.readValue(json,
                             new TypeReference<List<Session>>() {});
                     for (Session s : list) {
                         sessions.put(s.getId(), s);
                     }
-                    log.info("Loaded {} sessions from {}", sessions.size(), STORE_PATH);
+                    log.info("Loaded {} sessions from {}", sessions.size(), storePath);
                 }
             }
         } catch (IOException e) {
@@ -52,7 +58,7 @@ public class SessionService {
         try {
             List<Session> list = new ArrayList<>(sessions.values());
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(list);
-            Files.writeString(STORE_PATH, json,
+            Files.writeString(storePath, json,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
             log.error("Failed to save sessions to file", e);
