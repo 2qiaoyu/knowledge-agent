@@ -7,6 +7,7 @@ import com.knowledge.model.Session;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -25,6 +26,7 @@ public class SessionService {
     private final ObjectMapper objectMapper;
     private final Path storePath;
 
+    @Autowired
     public SessionService(ObjectMapper objectMapper) {
         this(objectMapper, DEFAULT_storePath);
     }
