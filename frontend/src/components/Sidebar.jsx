@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import useStore from '../store';
 
 export default function Sidebar() {
@@ -12,6 +12,25 @@ export default function Sidebar() {
   const domains = useStore((s) => s.domains);
   const fetchDomainContent = useStore((s) => s.fetchDomainContent);
   const deleteDomain = useStore((s) => s.deleteDomain);
+  const searchKnowledge = useStore((s) => s.searchKnowledge);
+  const clearSearch = useStore((s) => s.clearSearch);
+  const searchQuery = useStore((s) => s.searchQuery);
+  const searchResults = useStore((s) => s.searchResults);
+
+  const [localSearch, setLocalSearch] = useState('');
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    const query = localSearch.trim();
+    if (query) {
+      searchKnowledge(query);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setLocalSearch('');
+    clearSearch();
+  };
 
   return (
     <aside className="sidebar">
@@ -66,29 +85,81 @@ export default function Sidebar() {
 
       {sidebarTab === 'knowledge' && (
         <div className="sidebar-content">
-          <ul className="domain-list">
-            {domains.map((d) => (
-              <li
-                key={d}
-                className="domain-item"
-                onClick={() => fetchDomainContent(d)}
-              >
-                <span className="domain-name">{d}</span>
-                <button
-                  className="btn-delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteDomain(d);
-                  }}
-                >
-                  x
-                </button>
-              </li>
-            ))}
-            {domains.length === 0 && (
-              <li className="empty-hint">暂无知识域，开始对话后将自动创建</li>
+          {/* Search bar */}
+          <form className="knowledge-search" onSubmit={handleSearch}>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="搜索知识库..."
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+            />
+            {searchQuery && (
+              <button type="button" className="btn-clear-search" onClick={handleClearSearch}>
+                x
+              </button>
             )}
-          </ul>
+          </form>
+
+          {/* Search results */}
+          {searchQuery && (
+            <div className="search-results">
+              <div className="search-results-header">
+                搜索结果 ({searchResults.length})
+              </div>
+              {searchResults.length === 0 ? (
+                <div className="empty-hint">未找到相关内容</div>
+              ) : (
+                <ul className="search-result-list">
+                  {searchResults.map((r, i) => (
+                    <li
+                      key={i}
+                      className="search-result-item"
+                      onClick={() => {
+                        fetchDomainContent(r.domain);
+                        handleClearSearch();
+                      }}
+                    >
+                      <div className="search-result-domain">{r.domain}</div>
+                      <div className="search-result-question">{r.question}</div>
+                      {r.answer && (
+                        <div className="search-result-preview">{r.answer}</div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Domain list (hidden during search) */}
+          {!searchQuery && (
+            <>
+              <ul className="domain-list">
+                {domains.map((d) => (
+                  <li
+                    key={d}
+                    className="domain-item"
+                    onClick={() => fetchDomainContent(d)}
+                  >
+                    <span className="domain-name">{d}</span>
+                    <button
+                      className="btn-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteDomain(d);
+                      }}
+                    >
+                      x
+                    </button>
+                  </li>
+                ))}
+                {domains.length === 0 && (
+                  <li className="empty-hint">暂无知识域，开始对话后将自动创建</li>
+                )}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </aside>

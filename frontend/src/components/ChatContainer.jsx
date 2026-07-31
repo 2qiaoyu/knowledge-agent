@@ -3,6 +3,7 @@ import useStore from '../store';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 import MarkdownViewer from './MarkdownViewer';
+import KnowledgeViewer from './KnowledgeViewer';
 
 export default function ChatContainer() {
   const messages = useStore((s) => s.messages);
@@ -10,6 +11,7 @@ export default function ChatContainer() {
   const streamingContent = useStore((s) => s.streamingContent);
   const selectedDomain = useStore((s) => s.selectedDomain);
   const domainContent = useStore((s) => s.domainContent);
+  const stopGeneration = useStore((s) => s.stopGeneration);
   const bottomRef = useRef(null);
   const messagesAreaRef = useRef(null);
 
@@ -32,18 +34,7 @@ export default function ChatContainer() {
   if (selectedDomain) {
     return (
       <main className="chat-container">
-        <div className="knowledge-viewer">
-          <div className="knowledge-header">
-            <h2>{selectedDomain}</h2>
-            <button
-              className="btn-back"
-              onClick={() => useStore.getState().clearDomainView()}
-            >
-              返回
-            </button>
-          </div>
-          <MarkdownViewer content={domainContent} />
-        </div>
+        <KnowledgeViewer />
       </main>
     );
   }
@@ -60,7 +51,12 @@ export default function ChatContainer() {
         <ChatMessages messages={messages} />
         {streaming && (
           <div className="message assistant streaming">
-            <div className="message-role">AI</div>
+            <div className="message-role">
+              <span>AI</span>
+              <button className="btn-stop" onClick={stopGeneration} title="停止生成">
+                停止生成
+              </button>
+            </div>
             <div className="message-content">
               <MarkdownViewer content={streamingContent} streaming />
             </div>

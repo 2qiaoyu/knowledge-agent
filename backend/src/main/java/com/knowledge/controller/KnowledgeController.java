@@ -2,6 +2,7 @@ package com.knowledge.controller;
 
 import com.knowledge.service.KnowledgeService;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,37 @@ public class KnowledgeController {
                 "domain", domain,
                 "content", knowledgeService.getKnowledgeContent(domain)
         );
+    }
+
+    @GetMapping("/search")
+    public Mono<List<KnowledgeService.SearchResult>> search(
+            @RequestParam("q") String query,
+            @RequestParam(value = "topK", defaultValue = "5") int topK) {
+        return knowledgeService.searchEntries(query, topK);
+    }
+
+    @GetMapping("/domains/{domain}/entries")
+    public List<KnowledgeService.EntryRef> listEntries(@PathVariable String domain) {
+        return knowledgeService.listEntries(domain);
+    }
+
+    @PutMapping("/domains/{domain}/entries/{entryId}")
+    public Map<String, String> updateEntry(
+            @PathVariable String domain,
+            @PathVariable String entryId,
+            @RequestBody Map<String, String> body) {
+        String question = body.getOrDefault("question", "");
+        String answer = body.getOrDefault("answer", "");
+        knowledgeService.updateEntry(domain, entryId, question, answer);
+        return Map.of("status", "updated");
+    }
+
+    @DeleteMapping("/domains/{domain}/entries/{entryId}")
+    public Map<String, String> deleteEntry(
+            @PathVariable String domain,
+            @PathVariable String entryId) {
+        knowledgeService.deleteEntry(domain, entryId);
+        return Map.of("status", "deleted");
     }
 
     @DeleteMapping("/domains/{domain}")

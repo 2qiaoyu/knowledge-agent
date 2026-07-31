@@ -231,6 +231,28 @@ html, body, #root {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-stop {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.btn-stop:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: var(--danger);
 }
 
 .message-content {
@@ -414,6 +436,29 @@ html, body, #root {
   font-style: italic;
 }
 
+/* Regenerate bar */
+.regenerate-bar {
+  max-width: 800px;
+  margin: 0 auto 16px;
+  text-align: center;
+}
+
+.btn-regenerate {
+  font-size: 13px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-regenerate:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent);
+}
+
 /* Streaming message */
 .message.streaming {
   opacity: 0.97;
@@ -528,6 +573,97 @@ html, body, #root {
   border-color: var(--accent);
 }
 
+/* Knowledge Search */
+.knowledge-search {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.btn-clear-search {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.btn-clear-search:hover {
+  background: var(--bg-tertiary);
+  color: var(--danger);
+}
+
+.search-results-header {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.search-result-list {
+  list-style: none;
+}
+
+.search-result-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+}
+
+.search-result-item:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+}
+
+.search-result-domain {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.search-result-question {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-preview {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Knowledge Viewer */
 .knowledge-viewer {
   flex: 1;
@@ -561,6 +697,120 @@ html, body, #root {
 
 .btn-back:hover {
   background: var(--accent-dim);
+}
+
+/* Entry list */
+.entry-list {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.entry-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.entry-question {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.entry-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.entry-answer {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.entry-answer .markdown-body {
+  font-size: 14px;
+}
+
+.entry-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-edit, .btn-delete-entry, .btn-save, .btn-cancel {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: all 0.15s;
+}
+
+.btn-edit:hover, .btn-save:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.btn-delete-entry:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.btn-cancel:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Entry edit mode */
+.entry-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.entry-edit-question {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+}
+
+.entry-edit-question:focus {
+  border-color: var(--accent);
+}
+
+.entry-edit-answer {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  line-height: 1.6;
+}
+
+.entry-edit-answer:focus {
+  border-color: var(--accent);
+}
+
+.entry-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 /* Scrollbar */

@@ -10,6 +10,7 @@ const useStore = create((set, get) => ({
   messages: [],
   streaming: false,
   streamingContent: '',
+  abortController: null,
 
   // Settings
   enableWebSearch: false,
@@ -21,6 +22,9 @@ const useStore = create((set, get) => ({
   domains: [],
   selectedDomain: null,
   domainContent: '',
+  searchQuery: '',
+  searchResults: [],
+  entries: [],
 
   // UI
   sidebarTab: 'sessions', // 'sessions' | 'knowledge'
@@ -78,7 +82,8 @@ const useStore = create((set, get) => ({
   // Actions - Chat
   sendMessage: async (content) => {
     const { currentSessionId, enableWebSearch, llmProvider } = get();
-    set({ streaming: true, streamingContent: '' });
+    const controller = new AbortController();
+    set({ streaming: true, streamingContent: '', abortController: controller });
 
     const userMsg = { id: Date.now().toString(), role: 'user', content, timestamp: new Date().toISOString() };
     set((s) => ({ messages: [...s.messages, userMsg] }));
@@ -93,6 +98,7 @@ const useStore = create((set, get) => ({
           enableWebSearch,
           provider: llmProvider,
         }),
+        signal: controller.signal,
       });
 
       const reader = response.body.getReader();
@@ -178,8 +184,178 @@ const useStore = create((set, get) => ({
       // Refresh knowledge domains
       get().fetchDomains();
     } catch (e) {
+      if (e.name === 'AbortError') {
+        // 用户主动停止生成，将已有内容作为完整回复保存
+        if (fullContent && fullContent.trim()) {
+          const assistantMsg = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: fullContent + '\n\n*(已停止生成)*',
+            timestamp: new Date().toISOString(),
+          };
+          set((s) => ({
+            messages: [...s.messages, assistantMsg],
+            streamingContent: '',
+            streaming: false,
+            abortController: null,
+          }));
+          get().fetchSessions();
+          return;
+        }
+      }
       console.error('Chat error', e);
-      set({ streaming: false });
+      set({ streaming: false, abortController: null });
+    }
+  },
+
+  stopGeneration: () => {
+    const { abortController } = get();
+    if (abortController) {
+      abortController.abort();
+      set({ streaming: false, abortController: null });
+    }
+  },
+
+  regenerate: async () => {
+    const { messages, currentSessionId, enableWebSearch, llmProvider, streaming } = get();
+    if (streaming) return;
+
+    // 找到最后一条 assistant 和 user 消息
+    let lastAssistantIdx = -1;
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (lastAssistantIdx === -1 && messages[i].role === 'assistant') lastAssistantIdx = i;
+      if (lastUserIdx === -1 && messages[i].role === 'user') lastUserIdx = i;
+      if (lastAssistantIdx !== -1 && lastUserIdx !== -1) break;
+    }
+
+    if (lastAssistantIdx === -1 || lastUserIdx === -1 || lastUserIdx >= lastAssistantIdx) return;
+
+    const userMessage = messages[lastUserIdx].content;
+
+    // 移除最后一条 assistant 消息
+    set((s) => ({
+      messages: s.messages.slice(0, lastAssistantIdx),
+      streaming: true,
+      streamingContent: '',
+    }));
+
+    // 重新发送
+    const controller = new AbortController();
+    set({ abortController: controller });
+
+    try {
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+          message: userMessage,
+          enableWebSearch,
+          provider: llmProvider,
+        }),
+        signal: controller.signal,
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+
+      let streamEnded = false;
+      let debounceTimer = null;
+      const DEBOUNCE_MS = 40;
+
+      const flushStreaming = () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+        set({ streamingContent: fullContent });
+      };
+
+      const scheduleStreamingFlush = () => {
+        if (debounceTimer) return;
+        debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
+      };
+
+      const handleEvent = (data) => {
+        if (data === '[DONE]') {
+          streamEnded = true;
+          flushStreaming();
+          return;
+        }
+        if (data.startsWith('[SESSION_ID:')) {
+          const sid = data.slice(13, -1);
+          set({ currentSessionId: sid });
+          get().fetchSessions();
+          return;
+        }
+        fullContent += data;
+        scheduleStreamingFlush();
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const { events, remainder } = parseSSEBuffer(buffer);
+        buffer = remainder;
+        for (const data of events) {
+          if (!data) continue;
+          handleEvent(data);
+          if (streamEnded) break;
+        }
+        if (streamEnded) break;
+      }
+
+      if (!streamEnded && buffer.trim()) {
+        const { events } = parseSSEBuffer(`${buffer}\n\n`);
+        for (const data of events) {
+          if (!data) continue;
+          handleEvent(data);
+          if (streamEnded) break;
+        }
+      }
+
+      flushStreaming();
+
+      const assistantMsg = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: fullContent,
+        timestamp: new Date().toISOString(),
+      };
+      set((s) => ({
+        messages: [...s.messages, assistantMsg],
+        streamingContent: '',
+        streaming: false,
+        abortController: null,
+      }));
+
+      get().fetchSessions();
+      get().fetchDomains();
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        if (fullContent && fullContent.trim()) {
+          const assistantMsg = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: fullContent + '\n\n*(已停止生成)*',
+            timestamp: new Date().toISOString(),
+          };
+          set((s) => ({
+            messages: [...s.messages, assistantMsg],
+            streamingContent: '',
+            streaming: false,
+            abortController: null,
+          }));
+          get().fetchSessions();
+          return;
+        }
+      }
+      console.error('Regenerate error', e);
+      set({ streaming: false, abortController: null });
     }
   },
 
@@ -235,7 +411,57 @@ const useStore = create((set, get) => ({
     }
   },
 
-  clearDomainView: () => set({ selectedDomain: null, domainContent: '' }),
+  searchKnowledge: async (query) => {
+    if (!query || !query.trim()) {
+      set({ searchQuery: '', searchResults: [] });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/knowledge/search?q=${encodeURIComponent(query)}&topK=8`);
+      const results = await res.json();
+      set({ searchQuery: query, searchResults: results });
+    } catch (e) {
+      console.error('Search failed', e);
+      set({ searchResults: [] });
+    }
+  },
+
+  clearSearch: () => set({ searchQuery: '', searchResults: [] }),
+
+  fetchEntries: async (domain) => {
+    try {
+      const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/entries`);
+      const entries = await res.json();
+      set({ entries });
+    } catch (e) {
+      console.error('Failed to fetch entries', e);
+      set({ entries: [] });
+    }
+  },
+
+  updateEntry: async (domain, entryId, question, answer) => {
+    try {
+      await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/entries/${entryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, answer }),
+      });
+    } catch (e) {
+      console.error('Failed to update entry', e);
+    }
+  },
+
+  deleteEntry: async (domain, entryId) => {
+    try {
+      await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/entries/${entryId}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      console.error('Failed to delete entry', e);
+    }
+  },
+
+  clearDomainView: () => set({ selectedDomain: null, domainContent: '', entries: [] }),
   setSidebarTab: (tab) => set({ sidebarTab: tab, selectedDomain: null, domainContent: '' }),
 }));
 

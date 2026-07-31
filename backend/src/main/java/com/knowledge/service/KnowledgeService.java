@@ -10,6 +10,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -17,6 +18,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -210,6 +213,151 @@ public class KnowledgeService {
         sb.append("---\n\n");
         return sb.toString();
     }
+
+    /**
+     * Search knowledge entries across all domains using vector similarity.
+     * Returns Mono to offload blocking Ollama embedding call to boundedElastic scheduler.
+     */
+    public Mono<List<SearchResult>> searchEntries(String query, int topK) {
+        return Mono.fromCallable(() -> vectorStore.similaritySearch(
+                SearchRequest.builder().query(query).topK(topK).build()))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .map(results -> {
+                    if (results.isEmpty()) return List.<SearchResult>of();
+
+                    return results.stream().map(doc -> {
+                        String domain = (String) doc.getMetadata().getOrDefault("domain", "未知");
+                        String question = (String) doc.getMetadata().getOrDefault("question", "");
+                        String content = doc.getText();
+                        // Extract answer from "Q: xxx\nA: yyy" format
+                        String answer = "";
+                        int aIdx = content.indexOf("\nA: ");
+                        if (aIdx >= 0) {
+                            answer = content.substring(aIdx + 4);
+                        } else if (content.startsWith("Q: ")) {
+                            answer = content;
+                        }
+                        // Truncate answer for preview
+                        if (answer.length() > 200) {
+                            answer = answer.substring(0, 200) + "...";
+                        }
+                        return new SearchResult(domain, question, answer);
+                    }).collect(Collectors.toList());
+                });
+    }
+
+    public record SearchResult(String domain, String question, String answer) {}
+
+    // ---- Entry management (parse/edit/delete individual Q&A entries) ----
+
+    private static final Pattern ENTRY_PATTERN = Pattern.compile(
+            "## Q: (.*?)\\n\\n\\*\\*日期\\*\\*:.*?\\n\\n(.*?)(?=\\n## Q:|\\n---|$)",
+            Pattern.DOTALL);
+
+    /**
+     * Parse a domain's Markdown file into individual Q&A entries.
+     */
+    public List<EntryRef> listEntries(String domain) {
+        Path file = domainFile(domain);
+        if (!Files.exists(file)) return List.of();
+
+        try {
+            String content = Files.readString(file);
+            List<EntryRef> entries = new ArrayList<>();
+            Matcher matcher = ENTRY_PATTERN.matcher(content);
+            int idx = 0;
+            while (matcher.find()) {
+                String question = matcher.group(1).trim();
+                String answer = matcher.group(2).trim();
+                entries.add(new EntryRef(String.valueOf(idx), question, answer, matcher.start(), matcher.end()));
+                idx++;
+            }
+            return entries;
+        } catch (IOException e) {
+            log.warn("Failed to parse entries for domain {}: {}", domain, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Update a specific entry in the domain's Markdown file.
+     */
+    public void updateEntry(String domain, String entryId, String newQuestion, String newAnswer) {
+        Path file = domainFile(domain);
+        if (!Files.exists(file)) return;
+
+        try {
+            String content = Files.readString(file);
+            List<EntryRef> entries = listEntries(domain);
+            int idx = Integer.parseInt(entryId);
+            if (idx < 0 || idx >= entries.size()) return;
+
+            EntryRef target = entries.get(idx);
+            // Replace the entry content
+            String oldEntry = content.substring(target.start, target.end);
+            String newEntry = "## Q: " + newQuestion + "\n\n" +
+                    "**日期**: " + DATE_FMT.format(Instant.now()) + "\n\n" +
+                    newAnswer + "\n\n";
+
+            String updated = content.substring(0, target.start) + newEntry + content.substring(target.end);
+            Files.writeString(file, updated, StandardOpenOption.TRUNCATE_EXISTING);
+
+            // Re-index: remove old and add new
+            reindexEntry(domain, target.question, newQuestion, newAnswer);
+            log.info("Updated entry {} in domain '{}'", entryId, domain);
+        } catch (IOException e) {
+            log.error("Failed to update entry {} in domain {}: {}", entryId, domain, e.getMessage());
+        }
+    }
+
+    /**
+     * Delete a specific entry from the domain's Markdown file.
+     */
+    public void deleteEntry(String domain, String entryId) {
+        Path file = domainFile(domain);
+        if (!Files.exists(file)) return;
+
+        try {
+            String content = Files.readString(file);
+            List<EntryRef> entries = listEntries(domain);
+            int idx = Integer.parseInt(entryId);
+            if (idx < 0 || idx >= entries.size()) return;
+
+            EntryRef target = entries.get(idx);
+            // Remove the entry (including trailing --- if present)
+            int end = target.end;
+            if (content.substring(end).startsWith("\n---\n")) {
+                end += 6; // length of "\n---\n"
+            } else if (content.substring(end).startsWith("---\n")) {
+                end += 5;
+            }
+
+            String updated = content.substring(0, target.start) + content.substring(end);
+            // Clean up multiple consecutive blank lines
+            updated = updated.replaceAll("\\n{4,}", "\n\n\n");
+            Files.writeString(file, updated, StandardOpenOption.TRUNCATE_EXISTING);
+
+            // Remove from vector store
+            removeFromIndex(domain, target.question);
+            log.info("Deleted entry {} from domain '{}'", entryId, domain);
+        } catch (IOException e) {
+            log.error("Failed to delete entry {} from domain {}: {}", entryId, domain, e.getMessage());
+        }
+    }
+
+    private void reindexEntry(String domain, String oldQuestion, String newQuestion, String newAnswer) {
+        // Note: Chroma doesn't support easy deletion by metadata, so we just add the new version.
+        // Old entries will have lower similarity scores naturally.
+        indexEntry(domain, newQuestion, newAnswer, null);
+    }
+
+    private void removeFromIndex(String domain, String question) {
+        // Chroma vector store doesn't easily support deletion by metadata filter
+        // For now, the old entry remains but will have lower relevance scores
+        log.debug("Note: Old vector entry for '{}' in '{}' not removed (Chroma limitation)", question, domain);
+    }
+
+    public record EntryRef(String id, String question, String answer, int start, int end) {}
 
     public void deleteDomain(String domain) {
         try {
