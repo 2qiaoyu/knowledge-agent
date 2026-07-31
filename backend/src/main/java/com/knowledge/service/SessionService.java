@@ -110,4 +110,14 @@ public class SessionService {
         sessions.remove(id);
         saveToFile();
     }
+
+    public boolean deleteMessage(String sessionId, String messageId) {
+        Session session = getSession(sessionId);
+        boolean removed = session.getMessages().removeIf(m -> messageId.equals(m.getId()));
+        if (removed) {
+            session.setUpdatedAt(Instant.now());
+            saveToFile();
+        }
+        return removed;
+    }
 }

@@ -208,6 +208,23 @@ const useStore = create((set, get) => ({
     }
   },
 
+  deleteMessage: async (messageId) => {
+    const { currentSessionId, messages } = get();
+    if (!currentSessionId) {
+      // 未同步到后端的会话（新对话尚未发送过消息），仅前端删除
+      set({ messages: messages.filter((m) => m.id !== messageId) });
+      return;
+    }
+    try {
+      await fetch(`/api/sessions/${currentSessionId}/messages/${messageId}`, {
+        method: 'DELETE',
+      });
+      set({ messages: messages.filter((m) => m.id !== messageId) });
+    } catch (e) {
+      console.error('Failed to delete message', e);
+    }
+  },
+
   stopGeneration: () => {
     const { abortController } = get();
     if (abortController) {

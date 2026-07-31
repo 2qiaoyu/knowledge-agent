@@ -61,4 +61,12 @@ public class ChatController {
         sessionService.deleteSession(id);
         return Map.of("status", "deleted");
     }
+
+    @DeleteMapping("/sessions/{sessionId}/messages/{messageId}")
+    public Map<String, String> deleteMessage(
+            @PathVariable String sessionId,
+            @PathVariable String messageId) {
+        boolean removed = sessionService.deleteMessage(sessionId, messageId);
+        return Map.of("status", removed ? "deleted" : "not_found");
+    }
 }
