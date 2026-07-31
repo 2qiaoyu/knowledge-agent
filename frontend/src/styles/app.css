@@ -725,6 +725,31 @@ html, body, #root {
   font-weight: 700;
 }
 
+.entry-sources {
+  font-size: 13px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border-left: 3px solid var(--accent-dim);
+}
+
+.entry-sources-label {
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 4px;
+}
+
+.entry-sources .markdown-body {
+  font-size: 13px;
+  display: inline;
+}
+
+.entry-sources .markdown-body p {
+  display: inline;
+  margin: 0;
+}
+
 .entry-answer {
   font-size: 14px;
   color: var(--text-secondary);

@@ -89,6 +89,12 @@ export default function KnowledgeViewer() {
                   <div className="entry-question">
                     <span className="entry-label">Q:</span> {entry.question}
                   </div>
+                  {entry.sources && (
+                    <div className="entry-sources">
+                      <span className="entry-sources-label">参考来源:</span>
+                      <MarkdownViewer content={entry.sources} />
+                    </div>
+                  )}
                   <div className="entry-answer">
                     <MarkdownViewer content={entry.answer} />
                   </div>

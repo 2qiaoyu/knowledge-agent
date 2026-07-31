@@ -250,12 +250,12 @@ public class KnowledgeService {
 
     // ---- Entry management (parse/edit/delete individual Q&A entries) ----
 
-    private static final Pattern ENTRY_PATTERN = Pattern.compile(
-            "## Q: (.*?)\\n\\n\\*\\*日期\\*\\*:.*?\\n\\n(.*?)(?=\\n## Q:|\\n---|$)",
-            Pattern.DOTALL);
+    private static final Pattern SOURCES_PATTERN = Pattern.compile("\\| \\*\\*来源\\*\\*: (.+)", Pattern.DOTALL);
+    private static final Pattern REFERENCES_PATTERN = Pattern.compile("(?m)^---\\s*\\n参考来源[：:](.*)$", Pattern.DOTALL);
 
     /**
      * Parse a domain's Markdown file into individual Q&A entries.
+     * Strategy: split by "## Q:" marker, then parse each chunk.
      */
     public List<EntryRef> listEntries(String domain) {
         Path file = domainFile(domain);
@@ -264,12 +264,60 @@ public class KnowledgeService {
         try {
             String content = Files.readString(file);
             List<EntryRef> entries = new ArrayList<>();
-            Matcher matcher = ENTRY_PATTERN.matcher(content);
+
+            // Split by "## Q:" to get individual entry chunks
+            String[] chunks = content.split("(?=## Q: )");
+
             int idx = 0;
-            while (matcher.find()) {
-                String question = matcher.group(1).trim();
-                String answer = matcher.group(2).trim();
-                entries.add(new EntryRef(String.valueOf(idx), question, answer, matcher.start(), matcher.end()));
+            int offset = 0;
+            for (String chunk : chunks) {
+                if (!chunk.startsWith("## Q: ")) continue;
+
+                // Find the date line
+                int dateIdx = chunk.indexOf("**日期**:");
+                if (dateIdx < 0) continue;
+
+                // Extract question (between "## Q: " and first newline)
+                int qStart = 6; // length of "## Q: "
+                int qEnd = chunk.indexOf("\n", qStart);
+                if (qEnd < 0) continue;
+                String question = chunk.substring(qStart, qEnd).trim();
+
+                // Extract date line
+                int dateLineEnd = chunk.indexOf("\n", dateIdx);
+                if (dateLineEnd < 0) dateLineEnd = chunk.length();
+                String dateLine = chunk.substring(dateIdx, dateLineEnd);
+                String sources = "";
+                Matcher sourcesMatcher = SOURCES_PATTERN.matcher(dateLine);
+                if (sourcesMatcher.find()) {
+                    sources = sourcesMatcher.group(1).trim();
+                }
+
+                // Extract answer: everything after the date line + blank line
+                int answerStart = dateLineEnd;
+                if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
+                if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
+
+                // Check for references section at the end
+                String answer = chunk.substring(answerStart);
+                Matcher refMatcher = REFERENCES_PATTERN.matcher(answer);
+                if (refMatcher.find()) {
+                    // Extract references as sources if not already found
+                    if (sources.isEmpty()) {
+                        sources = refMatcher.group(1).trim();
+                    }
+                    answer = answer.substring(0, refMatcher.start()).trim();
+                } else {
+                    // Remove trailing --- if present
+                    if (answer.endsWith("\n---")) {
+                        answer = answer.substring(0, answer.length() - 4).trim();
+                    } else if (answer.endsWith("---")) {
+                        answer = answer.substring(0, answer.length() - 3).trim();
+                    }
+                }
+
+                entries.add(new EntryRef(String.valueOf(idx), question, answer, sources, offset, offset + chunk.length()));
+                offset += chunk.length();
                 idx++;
             }
             return entries;
@@ -357,7 +405,7 @@ public class KnowledgeService {
         log.debug("Note: Old vector entry for '{}' in '{}' not removed (Chroma limitation)", question, domain);
     }
 
-    public record EntryRef(String id, String question, String answer, int start, int end) {}
+    public record EntryRef(String id, String question, String answer, String sources, int start, int end) {}
 
     public void deleteDomain(String domain) {
         try {
