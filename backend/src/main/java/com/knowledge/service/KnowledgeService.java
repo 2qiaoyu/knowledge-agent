@@ -197,18 +197,43 @@ public class KnowledgeService {
     }
 
     /**
+     * 知识库检索的相似度阈值，低于此值的结果视为不相关，将被过滤。
+     * 使用 cosine distance 时，Chroma 返回的 score 范围为 0~1（1 为完全相似），
+     * 0.6 意味着保留中等以上相关度的结果。
+     */
+    private static final double SIMILARITY_THRESHOLD = 0.6;
+
+    /**
      * Retrieve relevant knowledge entries for context.
+     * 使用相似度阈值过滤低质量结果，避免噪声干扰。
+     * 输出格式优化为清晰的 Q&A 对，方便 LLM 理解。
      */
     public String retrieveContext(String query, int topK) {
         List<Document> results = vectorStore.similaritySearch(
-                SearchRequest.builder().query(query).topK(topK).build());
+                SearchRequest.builder()
+                        .query(query)
+                        .topK(topK)
+                        .similarityThreshold(SIMILARITY_THRESHOLD)
+                        .build());
         if (results.isEmpty()) return "";
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 已有相关知识\n\n");
         for (int i = 0; i < results.size(); i++) {
+            Document doc = results.get(i);
+            String question = (String) doc.getMetadata().getOrDefault("question", "");
+            String content = doc.getText();
+            // 从 "Q: xxx\nA: yyy" 格式中提取回答
+            String answer = "";
+            int aIdx = content.indexOf("\nA: ");
+            if (aIdx >= 0) {
+                answer = content.substring(aIdx + 4);
+            } else {
+                answer = content;
+            }
             sb.append("---\n");
-            sb.append(results.get(i).getFormattedContent()).append("\n");
+            sb.append("**问题**: ").append(question).append("\n\n");
+            sb.append("**回答**: ").append(answer).append("\n");
         }
         sb.append("---\n\n");
         return sb.toString();

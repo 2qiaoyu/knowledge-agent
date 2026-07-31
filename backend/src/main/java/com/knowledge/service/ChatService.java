@@ -71,8 +71,7 @@ public class ChatService {
      * <p>流程：
      * <ol>
      *   <li>保存用户消息到会话历史</li>
-     *   <li>检索知识库已有知识（向量检索）</li>
-     *   <li>可选：联网搜索</li>
+     *   <li>智能路由：根据配置决定检索知识库、联网搜索、或两者并用</li>
      *   <li>构建提示词 + 多轮记忆，调用 LLM 流式生成</li>
      *   <li>异步保存回答到知识库</li>
      * </ol>
@@ -98,8 +97,7 @@ public class ChatService {
         ChatClient client = resolveClient(request.getProvider());
         log.info("Using LLM provider: {}", request.getProvider() != null ? request.getProvider() : "default");
 
-        // 2. 创建多轮记忆 Advisor（修复：真正启用对话记忆）
-        // Spring AI 2.0 中 conversationId 通过 advisor param 传递
+        // 2. 创建多轮记忆 Advisor
         MessageChatMemoryAdvisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
                 .build();
 
@@ -126,60 +124,133 @@ public class ChatService {
     }
 
     /**
-     * 构建提示词：整合知识库检索 + 可选联网搜索。
+     * 构建提示词：智能路由 — 根据配置和检索结果质量决定使用哪些信息源。
      *
-     * <p>修复：现在会调用 {@link KnowledgeService#retrieveContext} 获取已有知识，
-     * 让 LLM 在回答时可以参考历史问答内容。
+     * <p>路由逻辑：
+     * <ul>
+     *   <li>联网搜索关闭 → 仅检索知识库，有则用知识库，无则让 LLM 用自身知识回答</li>
+     *   <li>联网搜索开启 → 知识库检索 + 联网搜索并行执行，综合两者回答</li>
+     * </ul>
+     *
+     * <p>System prompt 根据可用信息源动态选择，避免规则冲突。
      */
     private Mono<Prompt> buildPrompt(ChatRequest request) {
-        String systemPrompt = """
-                你是一个个人知识库助手，擅长基于已有知识和搜索结果回答问题。
-                回答规则：
-                1. 优先参考「已有相关知识」章节中的历史问答内容，这些是你之前积累的知识
-                2. 如果有搜索结果，搜索结果的知识优先于你自身的参数知识
-                3. 如果已有知识和搜索结果都不足以回答问题，请明确说明「未找到足够信息」
-                4. 回答应清晰、结构化，使用 Markdown 格式
-                5. 在答案正文中引用来源时，使用编号格式 [1]、[2]，对应末尾参考来源列表的编号
-                6. 在答案末尾添加「---\\n参考来源：」章节，列出所有引用的来源，格式为：\\n[1] [来源标题](完整链接)
-                7. 用中文回答
-                """;
+        String question = request.getMessage();
 
-        return Mono.fromCallable(request::getMessage)
+        // 先检索知识库（本地快速），根据结果和配置决定后续流程
+        return Mono.fromCallable(() -> knowledgeService.retrieveContext(question, KNOWLEDGE_TOP_K))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(question -> {
-                    // 修复：始终检索已有知识库上下文
-                    String knowledgeContext = knowledgeService.retrieveContext(question, KNOWLEDGE_TOP_K);
+                .flatMap(knowledgeContext -> {
+                    boolean hasKnowledge = !knowledgeContext.isEmpty();
 
-                    if (request.isEnableWebSearch()) {
-                        return webSearchService.search(question)
-                                .map(searchResult -> new Prompt(systemPrompt, buildUserPrompt(question, knowledgeContext, searchResult)))
-                                .defaultIfEmpty(new Prompt(systemPrompt, buildUserPrompt(question, knowledgeContext, null)));
+                    if (!request.isEnableWebSearch()) {
+                        // 未开启联网搜索 → 仅用知识库
+                        String systemPrompt = buildSystemPrompt(false, hasKnowledge);
+                        String userPrompt = buildUserPrompt(question, knowledgeContext, null, hasKnowledge);
+                        return Mono.just(new Prompt(systemPrompt, userPrompt));
                     }
 
-                    return Mono.just(new Prompt(systemPrompt, buildUserPrompt(question, knowledgeContext, null)));
+                    // 开启联网搜索 → 知识库已检索，再搜联网
+                    return webSearchService.search(question)
+                            .map(searchResult -> {
+                                boolean hasSearch = !searchResult.isEmpty();
+                                String systemPrompt = buildSystemPrompt(true, hasKnowledge);
+                                String userPrompt = buildUserPrompt(question, knowledgeContext, searchResult, hasKnowledge);
+                                return new Prompt(systemPrompt, userPrompt);
+                            })
+                            .defaultIfEmpty(new Prompt(
+                                    buildSystemPrompt(true, hasKnowledge),
+                                    buildUserPrompt(question, knowledgeContext, null, hasKnowledge)
+                            ));
                 });
     }
 
     /**
-     * 构建用户提示词，整合知识库上下文和搜索结果。
+     * 根据可用信息源动态构建 System Prompt，消除固定 prompt 的规则冲突问题。
+     *
+     * @param webSearchEnabled 是否开启了联网搜索
+     * @param hasKnowledge    知识库是否有相关结果
      */
-    private String buildUserPrompt(String question, String knowledgeContext, WebSearchService.SearchResult searchResult) {
-        StringBuilder sb = new StringBuilder();
+    private String buildSystemPrompt(boolean webSearchEnabled, boolean hasKnowledge) {
+        if (webSearchEnabled && hasKnowledge) {
+            // 两者都有：明确分工，避免优先级冲突
+            return """
+                    你是一个个人知识库助手，擅长综合已有知识和搜索结果回答问题。
+                    回答规则：
+                    1. 「已有相关知识」是你积累的个人知识，优先用于回答与历史学习/记录相关的问题
+                    2. 「搜索结果」提供最新的外部信息，用于补充已有知识的不足或获取最新动态
+                    3. 当两者信息冲突时，明确说明差异，并以搜索结果为准（更新、更权威）
+                    4. 信息不足时请明确说明「未找到足够信息」
+                    5. 回答应清晰、结构化，使用 Markdown 格式
+                    6. 引用来源时使用 [1]、[2] 编号，对应末尾参考来源列表
+                    7. 末尾添加「---\n参考来源：」章节，格式：\n[1] [来源标题](完整链接)
+                    8. 用中文回答
+                    """;
+        } else if (webSearchEnabled) {
+            // 仅搜索结果
+            return """
+                    你是一个知识助手，擅长基于搜索结果回答问题。
+                    回答规则：
+                    1. 搜索结果优先于你自身的参数知识
+                    2. 信息不足时请明确说明「未找到足够信息」
+                    3. 回答应清晰、结构化，使用 Markdown 格式
+                    4. 引用来源时使用 [1]、[2] 编号，对应末尾参考来源列表
+                    5. 末尾添加「---\n参考来源：」章节，格式：\n[1] [来源标题](完整链接)
+                    6. 用中文回答
+                    """;
+        } else if (hasKnowledge) {
+            // 仅知识库
+            return """
+                    你是一个个人知识库助手，擅长基于已有知识回答问题。
+                    回答规则：
+                    1. 优先参考「已有相关知识」中的历史问答内容
+                    2. 如果已有知识不足，可以结合你自身的通用知识回答，但需标注"此部分来自通用知识"
+                    3. 信息不足时请明确说明「未找到足够信息」
+                    4. 回答应清晰、结构化，使用 Markdown 格式
+                    5. 用中文回答
+                    """;
+        } else {
+            // 两者都没有
+            return """
+                    你是一个知识助手。
+                    回答规则：
+                    1. 本地知识库中无相关信息，请基于你自身的通用知识回答
+                    2. 信息不足时请明确说明「未找到足够信息」
+                    3. 回答应清晰、结构化，使用 Markdown 格式
+                    4. 用中文回答
+                    """;
+        }
+    }
 
-        if (searchResult != null && !searchResult.isEmpty()) {
+    /**
+     * 构建用户提示词，整合知识库上下文和搜索结果。
+     *
+     * @param hasKnowledge 知识库是否有相关结果（控制提示语）
+     */
+    private String buildUserPrompt(String question, String knowledgeContext,
+                                   WebSearchService.SearchResult searchResult,
+                                   boolean hasKnowledge) {
+        StringBuilder sb = new StringBuilder();
+        boolean hasSearch = searchResult != null && !searchResult.isEmpty();
+
+        if (hasSearch) {
             sb.append(searchResult.formatForPrompt()).append("\n\n");
         }
 
-        if (!knowledgeContext.isEmpty()) {
+        if (hasKnowledge) {
             sb.append(knowledgeContext).append("\n\n");
         }
 
-        sb.append("## 问题\n\n").append(question);
+        sb.append("## 问题\n\n").append(question).append("\n\n");
 
-        if (searchResult != null && !searchResult.isEmpty()) {
-            sb.append("\n\n请根据以上搜索结果和已有知识回答问题。");
-        } else if (!knowledgeContext.isEmpty()) {
-            sb.append("\n\n请参考已有知识回答问题。");
+        if (hasSearch && hasKnowledge) {
+            sb.append("请综合以上搜索结果和已有知识回答问题。当两者冲突时，说明差异并以搜索结果为准。");
+        } else if (hasSearch) {
+            sb.append("请根据以上搜索结果回答问题。");
+        } else if (hasKnowledge) {
+            sb.append("请参考已有知识回答问题。");
+        } else {
+            sb.append("本地知识库中无相关信息，请基于通用知识回答。");
         }
 
         return sb.toString();
