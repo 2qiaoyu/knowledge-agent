@@ -1,5 +1,6 @@
 package com.knowledge.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.model.ChatMessage;
 import com.knowledge.model.ChatMessage.Citation;
 import org.slf4j.Logger;
@@ -50,28 +51,36 @@ public class KnowledgeService {
 
     /**
      * Use LLM to classify a Q&A into an existing domain or suggest a new one.
+     *
+     * The prompt includes domain descriptions (sample questions) so the LLM can make
+     * informed decisions about granularity, and explicitly discourages over-use of
+     * the "通用知识" catch-all domain.
      */
     public String classifyDomainWithLlm(String question, String answer) {
         List<String> existing = listDomains();
 
-        String existingList = existing.isEmpty() ? "（暂无）" : String.join(", ", existing);
+        // Build domain descriptions: show sample questions for each domain
+        String domainDescriptions = buildDomainDescriptions(existing);
         String answerPreview = answer.length() > 500 ? answer.substring(0, 500) : answer;
 
         String prompt = """
                 你是一个知识分类助手。根据以下问题和回答，判断它属于哪个知识域。
 
-                现有知识域：%s
+                现有知识域及内容示例：
+                %s
 
-                问题：%s
-                回答：%s
+                待分类问题：%s
+                待分类回答：%s
 
-                规则：
-                1. 如果内容与某个现有知识域高度相关，返回该知识域名称
-                2. 如果是全新主题，创建一个新的知识域名称（2-5个中文字，简洁明确，如"前端开发""机器学习""Python"）
-                3. 只返回知识域名称，不要任何解释或标点
+                分类规则：
+                1. 如果内容与某个现有知识域的主题高度相关，返回该知识域名称
+                2. 如果是全新主题，创建一个新的知识域名称（2-5个中文字，简洁明确，如"向量数据库""Spring AI""OKR实践"）
+                3. 尽量避免使用"通用知识"——只有当内容确实横跨多个领域或完全无法归类时才使用
+                4. 每个知识域应该聚焦于一个特定的技术、概念或领域。如果某个主题有足够的深度（可以积累3条以上Q&A），就应该独立成域
+                5. 只返回知识域名称，不要任何解释或标点
 
                 知识域名称：
-                """.formatted(existingList, question, answerPreview);
+                """.formatted(domainDescriptions, question, answerPreview);
 
         try {
             String result = chatClient.prompt().user(prompt).call().content();
@@ -85,6 +94,199 @@ public class KnowledgeService {
         } catch (Exception e) {
             log.warn("LLM classification failed: {}", e.getMessage());
             throw e;  // let caller handle fallback
+        }
+    }
+
+    /**
+     * Build a description string for each domain showing sample questions,
+     * so the LLM can judge relevance by content rather than just domain name.
+     */
+    private String buildDomainDescriptions(List<String> domains) {
+        if (domains.isEmpty()) return "（暂无知识域）";
+
+        StringBuilder sb = new StringBuilder();
+        for (String domain : domains) {
+            sb.append("- ").append(domain).append(": ");
+            List<EntryRef> entries = listEntries(domain);
+            if (entries.isEmpty()) {
+                sb.append("（空）\n");
+            } else {
+                // Show up to 3 sample questions as a description of the domain's scope
+                String samples = entries.stream()
+                        .limit(3)
+                        .map(EntryRef::question)
+                        .collect(Collectors.joining("、"));
+                sb.append(samples);
+                if (entries.size() > 3) {
+                    sb.append(" 等").append(entries.size()).append("条");
+                }
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Re-classify all entries in "通用知识" into finer-grained domains.
+     * Uses a single LLM call to group all entries by topic, then migrates them.
+     *
+     * @return a summary map with counts of moved entries and created domains
+     */
+    public Map<String, Object> reclassifyGenericDomain() {
+        String genericDomain = "通用知识";
+        List<EntryRef> entries = listEntries(genericDomain);
+        if (entries.isEmpty()) {
+            return Map.of(
+                    "message", "通用知识为空，无需重新分类",
+                    "moved", 0,
+                    "domains", List.of()
+            );
+        }
+
+        // Build a numbered list of questions for the LLM
+        StringBuilder entriesText = new StringBuilder();
+        for (int i = 0; i < entries.size(); i++) {
+            entriesText.append(i).append(". ").append(entries.get(i).question()).append("\n");
+        }
+
+        // Get other existing domains for reference
+        List<String> otherDomains = listDomains().stream()
+                .filter(d -> !d.equals(genericDomain))
+                .collect(Collectors.toList());
+        String existingDesc = otherDomains.isEmpty() ? "（暂无）" : buildDomainDescriptions(otherDomains);
+
+        // Build a clear list of existing domain names for the LLM to reuse
+        String existingDomainNames = otherDomains.isEmpty() ? "（暂无）" : String.join(", ", otherDomains);
+
+        String prompt = """
+                以下是"通用知识"知识域中的所有Q&A条目。请将它们分组到不同的、更具体的知识域中。
+
+                现有其他知识域名称：%s
+
+                现有其他知识域及内容示例：
+                %s
+
+                待分组条目：
+                %s
+
+                请以JSON格式返回分组结果，格式如下：
+                {
+                  "domains": {
+                    "知识域名称1": [0, 2, 5],
+                    "知识域名称2": [1, 3],
+                    "知识域名称3": [4, 6, 7]
+                  }
+                }
+
+                分组规则：
+                1. 如果题目与某个现有知识域主题相关，必须使用该现有知识域的原有名称（如现有域叫"Prompt Engineering"，就不要创建"Prompt工程"）
+                2. 如果是全新主题，创建一个新的知识域名称（2-5个中文字，简洁明确，如"向量数据库""Java开发""Spring AI"）
+                3. 相似主题的题目分到同一个域
+                4. 每个域至少包含1条条目，不要创建只有1条的域除非主题确实独特
+                5. 只返回JSON，不要任何解释
+
+                分组结果：
+                """.formatted(existingDomainNames, existingDesc, entriesText);
+
+        try {
+            String result = chatClient.prompt().user(prompt).call().content();
+            Map<String, List<Integer>> grouping = parseGroupingResult(result);
+
+            if (grouping.isEmpty()) {
+                return Map.of("message", "LLM 未返回有效的分组结果", "moved", 0, "domains", List.of());
+            }
+
+            // Migrate entries to their new domains
+            List<String> createdDomains = new ArrayList<>();
+            int movedCount = 0;
+
+            // Track which entries to remove from 通用知识 (by index, descending)
+            List<Integer> toRemoveDesc = new ArrayList<>();
+
+            for (Map.Entry<String, List<Integer>> group : grouping.entrySet()) {
+                String newDomain = group.getKey();
+                List<Integer> indices = group.getValue();
+
+                if (indices.isEmpty()) continue;
+
+                boolean isNewDomain = !listDomains().contains(newDomain);
+                if (isNewDomain) {
+                    createdDomains.add(newDomain);
+                }
+
+                for (int idx : indices) {
+                    if (idx < 0 || idx >= entries.size()) continue;
+                    EntryRef entry = entries.get(idx);
+                    // Append to the new domain (without citations since we don't have them here)
+                    appendEntry(newDomain, entry.question(), entry.answer(), null);
+                    toRemoveDesc.add(idx);
+                    movedCount++;
+                }
+            }
+
+            // Remove migrated entries from 通用知识 (descending order to keep indices valid)
+            toRemoveDesc.sort(Collections.reverseOrder());
+            for (int idx : toRemoveDesc) {
+                deleteEntry(genericDomain, String.valueOf(idx));
+            }
+
+            // If 通用知识 is now empty, delete the file
+            if (listEntries(genericDomain).isEmpty()) {
+                deleteDomain(genericDomain);
+                createdDomains.add("(已删除空的通用知识)");
+            }
+
+            log.info("Re-classification complete: moved {} entries, created/filled {} domains",
+                    movedCount, createdDomains.size());
+
+            return Map.of(
+                    "message", "重新分类完成",
+                    "moved", movedCount,
+                    "domains", createdDomains
+            );
+        } catch (Exception e) {
+            log.error("Re-classification failed: {}", e.getMessage(), e);
+            throw new RuntimeException("重新分类失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Parse the LLM's JSON grouping response into a map of domain -> entry indices.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, List<Integer>> parseGroupingResult(String llmResponse) {
+        if (llmResponse == null || llmResponse.isBlank()) return Map.of();
+
+        try {
+            // Extract JSON from possible markdown code block
+            String json = llmResponse.trim();
+            if (json.contains("```")) {
+                int start = json.indexOf("```");
+                int end = json.lastIndexOf("```");
+                String block = json.substring(start, end);
+                // Remove the ```json or ``` prefix
+                json = block.replaceFirst("```json\\s*", "").replaceFirst("```\\s*", "").trim();
+            }
+
+            // Parse the JSON
+            Map<String, Object> root = new ObjectMapper().readValue(json, Map.class);
+            Object domainsObj = root.get("domains");
+            if (!(domainsObj instanceof Map)) return Map.of();
+
+            Map<String, Object> domains = (Map<String, Object>) domainsObj;
+            Map<String, List<Integer>> result = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : domains.entrySet()) {
+                if (entry.getValue() instanceof List) {
+                    List<Integer> indices = ((List<?>) entry.getValue()).stream()
+                            .map(v -> ((Number) v).intValue())
+                            .collect(Collectors.toList());
+                    result.put(entry.getKey(), indices);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("Failed to parse grouping result: {}", e.getMessage());
+            return Map.of();
         }
     }
 
@@ -280,7 +482,19 @@ public class KnowledgeService {
 
     /**
      * Parse a domain's Markdown file into individual Q&A entries.
-     * Strategy: split by "## Q:" marker, then parse each chunk.
+     * Supports two formats:
+     *   1. New format: "## Q: question" with "**日期**: ..." date line
+     *   2. Old format: "## N. 核心概念：title" (no date line, used in early seed data)
+     *
+     * Important: old-format entries only appear at the beginning of the file,
+     * before any "## Q:" entry. After the first "## Q:", all "## N. title"
+     * markers are subsections within Q: entries, not separate entries.
+     *
+     * Strategy:
+     *   - Split the content into two sections at the first "## Q:" marker
+     *   - The "old section" (before first Q:) is split by "## N. " markers
+     *   - The "new section" (from first Q: onwards) is split by "## Q: " markers
+     *     (so that Q: entries containing ## subsections stay intact)
      */
     public List<EntryRef> listEntries(String domain) {
         Path file = domainFile(domain);
@@ -290,60 +504,104 @@ public class KnowledgeService {
             String content = Files.readString(file);
             List<EntryRef> entries = new ArrayList<>();
 
-            // Split by "## Q:" to get individual entry chunks
-            String[] chunks = content.split("(?=## Q: )");
+            // Find the first "## Q:" to separate old-format and new-format sections
+            int firstQMarker = content.indexOf("## Q: ");
+            String oldSection;
+            String newSection;
+            if (firstQMarker < 0) {
+                oldSection = content;
+                newSection = "";
+            } else {
+                oldSection = content.substring(0, firstQMarker);
+                newSection = content.substring(firstQMarker);
+            }
 
             int idx = 0;
-            int offset = 0;
-            for (String chunk : chunks) {
-                if (!chunk.startsWith("## Q: ")) continue;
 
-                // Find the date line
-                int dateIdx = chunk.indexOf("**日期**:");
-                if (dateIdx < 0) continue;
+            // Parse old-format entries (## N. title) from the old section
+            if (!oldSection.isEmpty()) {
+                String[] oldChunks = oldSection.split("(?=## \\d+\\. )");
+                int offset = 0;
+                for (String chunk : oldChunks) {
+                    if (chunk.startsWith("# 知识域:")) continue; // skip the file header
+                    if (!chunk.matches("(?s)## \\d+\\..*")) continue;
 
-                // Extract question (between "## Q: " and first newline)
-                int qStart = 6; // length of "## Q: "
-                int qEnd = chunk.indexOf("\n", qStart);
-                if (qEnd < 0) continue;
-                String question = chunk.substring(qStart, qEnd).trim();
-
-                // Extract date line
-                int dateLineEnd = chunk.indexOf("\n", dateIdx);
-                if (dateLineEnd < 0) dateLineEnd = chunk.length();
-                String dateLine = chunk.substring(dateIdx, dateLineEnd);
-                String sources = "";
-                Matcher sourcesMatcher = SOURCES_PATTERN.matcher(dateLine);
-                if (sourcesMatcher.find()) {
-                    sources = sourcesMatcher.group(1).trim();
-                }
-
-                // Extract answer: everything after the date line + blank line
-                int answerStart = dateLineEnd;
-                if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
-                if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
-
-                // Check for references section at the end
-                String answer = chunk.substring(answerStart);
-                Matcher refMatcher = REFERENCES_PATTERN.matcher(answer);
-                if (refMatcher.find()) {
-                    // Extract references as sources if not already found
-                    if (sources.isEmpty()) {
-                        sources = refMatcher.group(1).trim();
+                    int newlineIdx = chunk.indexOf("\n");
+                    String question;
+                    int answerStart;
+                    if (newlineIdx < 0) {
+                        question = chunk.substring(3).trim();
+                        answerStart = chunk.length();
+                    } else {
+                        question = chunk.substring(3, newlineIdx).trim();
+                        answerStart = newlineIdx + 1;
+                        if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
                     }
-                    answer = answer.substring(0, refMatcher.start()).trim();
-                } else {
+
+                    String answer = chunk.substring(answerStart);
                     // Remove trailing --- if present
                     if (answer.endsWith("\n---")) {
                         answer = answer.substring(0, answer.length() - 4).trim();
                     } else if (answer.endsWith("---")) {
                         answer = answer.substring(0, answer.length() - 3).trim();
                     }
-                }
 
-                entries.add(new EntryRef(String.valueOf(idx), question, answer, sources, offset, offset + chunk.length()));
-                offset += chunk.length();
-                idx++;
+                    entries.add(new EntryRef(String.valueOf(idx), question, answer, "", offset, offset + chunk.length()));
+                    offset += chunk.length();
+                    idx++;
+                }
+            }
+
+            // Parse new-format entries (## Q: question) from the new section
+            if (!newSection.isEmpty()) {
+                String[] qChunks = newSection.split("(?=## Q: )");
+                int baseOffset = firstQMarker; // absolute offset of newSection in file
+                int qOffset = 0; // offset within newSection
+                for (String chunk : qChunks) {
+                    if (!chunk.startsWith("## Q: ")) continue;
+
+                    int dateIdx = chunk.indexOf("**日期**:");
+                    if (dateIdx < 0) continue; // need at least a date line
+
+                    int qStart = 6; // length of "## Q: "
+                    int qEnd = chunk.indexOf("\n", qStart);
+                    if (qEnd < 0) continue;
+                    String question = chunk.substring(qStart, qEnd).trim();
+
+                    int dateLineEnd = chunk.indexOf("\n", dateIdx);
+                    if (dateLineEnd < 0) dateLineEnd = chunk.length();
+                    String dateLine = chunk.substring(dateIdx, dateLineEnd);
+                    String sources = "";
+                    Matcher sourcesMatcher = SOURCES_PATTERN.matcher(dateLine);
+                    if (sourcesMatcher.find()) {
+                        sources = sourcesMatcher.group(1).trim();
+                    }
+
+                    int answerStart = dateLineEnd;
+                    if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
+                    if (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
+
+                    // Check for references section at the end
+                    String answer = chunk.substring(answerStart);
+                    Matcher refMatcher = REFERENCES_PATTERN.matcher(answer);
+                    if (refMatcher.find()) {
+                        if (sources.isEmpty()) {
+                            sources = refMatcher.group(1).trim();
+                        }
+                        answer = answer.substring(0, refMatcher.start()).trim();
+                    } else {
+                        // Remove trailing --- if present
+                        if (answer.endsWith("\n---")) {
+                            answer = answer.substring(0, answer.length() - 4).trim();
+                        } else if (answer.endsWith("---")) {
+                            answer = answer.substring(0, answer.length() - 3).trim();
+                        }
+                    }
+
+                    entries.add(new EntryRef(String.valueOf(idx), question, answer, sources, baseOffset + qOffset, baseOffset + qOffset + chunk.length()));
+                    qOffset += chunk.length();
+                    idx++;
+                }
             }
             return entries;
         } catch (IOException e) {
@@ -406,6 +664,12 @@ public class KnowledgeService {
             }
 
             String updated = content.substring(0, target.start) + content.substring(end);
+
+            // Ensure the file still starts with the domain header (protect against accidental header loss)
+            if (!updated.startsWith("# 知识域:")) {
+                updated = "# 知识域: " + domain + "\n\n" + updated;
+            }
+
             // Clean up multiple consecutive blank lines
             updated = updated.replaceAll("\\n{4,}", "\n\n\n");
             Files.writeString(file, updated, StandardOpenOption.TRUNCATE_EXISTING);

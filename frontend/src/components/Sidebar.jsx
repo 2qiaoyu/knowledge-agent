@@ -16,8 +16,10 @@ export default function Sidebar() {
   const clearSearch = useStore((s) => s.clearSearch);
   const searchQuery = useStore((s) => s.searchQuery);
   const searchResults = useStore((s) => s.searchResults);
+  const reclassifyDomains = useStore((s) => s.reclassifyDomains);
 
   const [localSearch, setLocalSearch] = useState('');
+  const [reclassifying, setReclassifying] = useState(false);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -30,6 +32,19 @@ export default function Sidebar() {
   const handleClearSearch = () => {
     setLocalSearch('');
     clearSearch();
+  };
+
+  const handleReclassify = async () => {
+    if (!window.confirm('将「通用知识」中的条目按主题拆分为更细的知识域，继续？')) return;
+    setReclassifying(true);
+    try {
+      const result = await reclassifyDomains();
+      alert(result.message || '重新分类完成');
+    } catch (e) {
+      alert('重新分类失败: ' + e.message);
+    } finally {
+      setReclassifying(false);
+    }
   };
 
   return (
@@ -135,6 +150,13 @@ export default function Sidebar() {
           {/* Domain list (hidden during search) */}
           {!searchQuery && (
             <>
+              <button
+                className="btn-reclassify"
+                onClick={handleReclassify}
+                disabled={reclassifying}
+              >
+                {reclassifying ? '重新分类中…' : '↻ 拆分通用知识'}
+              </button>
               <ul className="domain-list">
                 {domains.map((d) => (
                   <li

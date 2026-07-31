@@ -67,4 +67,17 @@ public class KnowledgeController {
         knowledgeService.deleteDomain(domain);
         return Map.of("status", "deleted");
     }
+
+    /**
+     * Re-classify entries in "通用知识" into finer-grained domains.
+     * Uses LLM to group all entries by topic, then migrates them to new/existing domains.
+     *
+     * Wrapped in Mono + boundedElastic because appendEntry() triggers a blocking
+     * Ollama embedding call (vectorStore.add), which is forbidden on Reactor threads.
+     */
+    @PostMapping("/reclassify")
+    public Mono<Map<String, Object>> reclassify() {
+        return Mono.fromCallable(knowledgeService::reclassifyGenericDomain)
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
 }
