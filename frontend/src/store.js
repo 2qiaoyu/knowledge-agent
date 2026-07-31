@@ -476,6 +476,41 @@ const useStore = create((set, get) => ({
 
   clearDomainView: () => set({ selectedDomain: null, domainContent: '', entries: [] }),
   setSidebarTab: (tab) => set({ sidebarTab: tab, selectedDomain: null, domainContent: '' }),
+
+  // Actions - Export
+  exportSession: () => {
+    const { messages, currentSessionId, sessions } = get();
+    if (messages.length === 0) return;
+
+    const session = sessions.find((s) => s.id === currentSessionId);
+    const title = session?.title || '未命名对话';
+    const date = new Date().toISOString().slice(0, 10);
+
+    let md = `# ${title}\n\n`;
+    md += `> 导出时间: ${new Date().toLocaleString('zh-CN')}  \n`;
+    md += `> 消息数: ${messages.length}\n\n---\n\n`;
+
+    messages.forEach((msg) => {
+      const role = msg.role === 'user' ? '用户' : 'AI';
+      md += `## ${role}\n\n`;
+      md += `${msg.content}\n\n`;
+      if (msg.timestamp) {
+        md += `*${new Date(msg.timestamp).toLocaleString('zh-CN')}*\n\n`;
+      }
+      md += '---\n\n';
+    });
+
+    // Trigger download
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}_${date}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 }));
 
 export default useStore;

@@ -12,8 +12,14 @@ export default function ChatContainer() {
   const selectedDomain = useStore((s) => s.selectedDomain);
   const domainContent = useStore((s) => s.domainContent);
   const stopGeneration = useStore((s) => s.stopGeneration);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const sessions = useStore((s) => s.sessions);
+  const exportSession = useStore((s) => s.exportSession);
   const bottomRef = useRef(null);
   const messagesAreaRef = useRef(null);
+
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
+  const sessionTitle = currentSession?.title || '新对话';
 
   useEffect(() => {
     const el = messagesAreaRef.current;
@@ -41,6 +47,14 @@ export default function ChatContainer() {
 
   return (
     <main className="chat-container">
+      <div className="chat-header">
+        <span className="chat-title">{sessionTitle}</span>
+        {messages.length > 0 && (
+          <button className="btn-export" onClick={exportSession} title="导出对话为 Markdown">
+            导出
+          </button>
+        )}
+      </div>
       <div className="messages-area" ref={messagesAreaRef}>
         {messages.length === 0 && !streaming && (
           <div className="welcome">
