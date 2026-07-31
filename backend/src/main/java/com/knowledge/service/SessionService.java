@@ -120,4 +120,38 @@ public class SessionService {
         }
         return removed;
     }
+
+    public boolean updateMessage(String sessionId, String messageId, String newContent) {
+        Session session = getSession(sessionId);
+        for (ChatMessage msg : session.getMessages()) {
+            if (messageId.equals(msg.getId())) {
+                msg.setContent(newContent);
+                session.setUpdatedAt(Instant.now());
+                saveToFile();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 删除指定消息索引之后的所有消息（不包括该消息本身）。
+     * 用于编辑用户消息后清除后续联动回复。
+     */
+    public void deleteMessagesAfter(String sessionId, String messageId) {
+        Session session = getSession(sessionId);
+        List<ChatMessage> messages = session.getMessages();
+        int idx = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            if (messageId.equals(messages.get(i).getId())) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx >= 0 && idx < messages.size() - 1) {
+            messages.subList(idx + 1, messages.size()).clear();
+            session.setUpdatedAt(Instant.now());
+            saveToFile();
+        }
+    }
 }

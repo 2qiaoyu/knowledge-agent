@@ -225,6 +225,174 @@ const useStore = create((set, get) => ({
     }
   },
 
+  // 编辑用户消息：更新内容 + 删除后续所有消息 + 自动重新发送
+  editMessage: async (messageId, newContent) => {
+    const { currentSessionId, messages, enableWebSearch, llmProvider } = get();
+    if (!newContent.trim()) return;
+
+    // 更新本地消息内容
+    const updatedMessages = messages.map((m) =>
+      m.id === messageId ? { ...m, content: newContent } : m
+    );
+    // 删除该消息之后的所有消息
+    const msgIdx = updatedMessages.findIndex((m) => m.id === messageId);
+    const truncatedMessages = updatedMessages.slice(0, msgIdx + 1);
+    set({ messages: truncatedMessages });
+
+    if (currentSessionId) {
+      try {
+        await fetch(`/api/sessions/${currentSessionId}/messages/${messageId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: newContent }),
+        });
+        await fetch(`/api/sessions/${currentSessionId}/messages/${messageId}/after`, {
+          method: 'DELETE',
+        });
+      } catch (e) {
+        console.error('Failed to update message on server', e);
+      }
+    }
+
+    // 自动重新发送
+    const controller = new AbortController();
+    set({ streaming: true, streamingContent: '', abortController: controller });
+
+    try {
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+          message: newContent,
+          enableWebSearch,
+          provider: llmProvider,
+        }),
+        signal: controller.signal,
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+
+      let streamEnded = false;
+      let debounceTimer = null;
+      const DEBOUNCE_MS = 40;
+
+      const flushStreaming = () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+        set({ streamingContent: fullContent });
+      };
+
+      const scheduleStreamingFlush = () => {
+        if (debounceTimer) return;
+        debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
+      };
+
+      const handleEvent = (data) => {
+        if (data === '[DONE]') {
+          streamEnded = true;
+          flushStreaming();
+          return;
+        }
+        if (data.startsWith('[SESSION_ID:')) {
+          const sid = data.slice(13, -1);
+          set({ currentSessionId: sid });
+          get().fetchSessions();
+          return;
+        }
+        fullContent += data;
+        scheduleStreamingFlush();
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const { events, remainder } = parseSSEBuffer(buffer);
+        buffer = remainder;
+        for (const data of events) {
+          if (!data) continue;
+          handleEvent(data);
+          if (streamEnded) break;
+        }
+        if (streamEnded) break;
+      }
+
+      if (!streamEnded && buffer.trim()) {
+        const { events } = parseSSEBuffer(`${buffer}\n\n`);
+        for (const data of events) {
+          if (!data) continue;
+          handleEvent(data);
+          if (streamEnded) break;
+        }
+      }
+
+      flushStreaming();
+
+      const assistantMsg = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: fullContent,
+        timestamp: new Date().toISOString(),
+      };
+      set((s) => ({
+        messages: [...s.messages, assistantMsg],
+        streamingContent: '',
+        streaming: false,
+      }));
+
+      get().fetchSessions();
+      get().fetchDomains();
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        if (fullContent && fullContent.trim()) {
+          const assistantMsg = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: fullContent + '\n\n*(已停止生成)*',
+            timestamp: new Date().toISOString(),
+          };
+          set((s) => ({
+            messages: [...s.messages, assistantMsg],
+            streamingContent: '',
+            streaming: false,
+            abortController: null,
+          }));
+          get().fetchSessions();
+          return;
+        }
+      }
+      console.error('Edit resend error', e);
+      set({ streaming: false, abortController: null });
+    }
+  },
+
+  // 编辑 AI 消息：仅更新内容
+  editAssistantMessage: async (messageId, newContent) => {
+    const { currentSessionId, messages } = get();
+    set({
+      messages: messages.map((m) =>
+        m.id === messageId ? { ...m, content: newContent } : m
+      ),
+    });
+    if (currentSessionId) {
+      try {
+        await fetch(`/api/sessions/${currentSessionId}/messages/${messageId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: newContent }),
+        });
+      } catch (e) {
+        console.error('Failed to update assistant message', e);
+      }
+    }
+  },
+
   stopGeneration: () => {
     const { abortController } = get();
     if (abortController) {

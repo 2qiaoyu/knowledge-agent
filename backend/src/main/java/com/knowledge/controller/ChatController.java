@@ -69,4 +69,22 @@ public class ChatController {
         boolean removed = sessionService.deleteMessage(sessionId, messageId);
         return Map.of("status", removed ? "deleted" : "not_found");
     }
+
+    @PutMapping("/sessions/{sessionId}/messages/{messageId}")
+    public Map<String, String> updateMessage(
+            @PathVariable String sessionId,
+            @PathVariable String messageId,
+            @RequestBody Map<String, String> body) {
+        String content = body.getOrDefault("content", "");
+        boolean updated = sessionService.updateMessage(sessionId, messageId, content);
+        return Map.of("status", updated ? "updated" : "not_found");
+    }
+
+    @DeleteMapping("/sessions/{sessionId}/messages/{messageId}/after")
+    public Map<String, String> deleteMessagesAfter(
+            @PathVariable String sessionId,
+            @PathVariable String messageId) {
+        sessionService.deleteMessagesAfter(sessionId, messageId);
+        return Map.of("status", "deleted");
+    }
 }
