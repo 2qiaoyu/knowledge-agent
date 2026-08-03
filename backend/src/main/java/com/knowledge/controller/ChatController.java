@@ -87,4 +87,30 @@ public class ChatController {
         sessionService.deleteMessagesAfter(sessionId, messageId);
         return Map.of("status", "deleted");
     }
+
+    /**
+     * List archived sessions.
+     */
+    @GetMapping("/sessions/archived")
+    public List<Session> listArchivedSessions() {
+        return sessionService.listArchivedSessions();
+    }
+
+    /**
+     * Archive a session.
+     */
+    @PostMapping("/sessions/{id}/archive")
+    public Map<String, String> archiveSession(@PathVariable String id) {
+        sessionService.archiveSession(id);
+        return Map.of("status", "archived");
+    }
+
+    /**
+     * Unarchive a session.
+     */
+    @PostMapping("/sessions/{id}/unarchive")
+    public Map<String, String> unarchiveSession(@PathVariable String id) {
+        sessionService.unarchiveSession(id);
+        return Map.of("status", "unarchived");
+    }
 }

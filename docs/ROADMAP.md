@@ -154,12 +154,13 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 | 18 | 键盘快捷键 | Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成（输入框聚焦时不触发） | `App.jsx` |
 | 21 | 消息操作菜单 | 悬浮 ⋯ 按钮展开下拉菜单（复制/编辑/删除），带复制成功反馈 | `ChatMessages.jsx`, `app.css` |
 | 19 | 暗色模式 | [data-theme="dark"] + CSS 变量，支持系统偏好检测，localStorage 持久化 | `App.jsx`, `Sidebar.jsx`, `app.css` |
+| T3 | 会话归档 | 活跃/归档分离，后端 API + 前端折叠区，支持归档/取消归档 | `SessionService.java`, `ChatController.java`, `Session.java`, `store.js`, `Sidebar.jsx`, `app.css` |
 
 ### ⏳ 待修复
 
 | # | 问题 | 严重度 | 建议方案 |
 |---|------|--------|----------|
-| T3 | sessions.json 无限增长 | 🟡 中 | 添加归档机制或定期清理；`GET /api/sessions` 增加分页 |
+| T3 | sessions.json 无限增长 | ✅ 已修复 | 会话归档机制：活跃/归档分离，API 端点归档/取消归档，前端折叠区显示 |
 | T6 | application.yml 硬编码真实密钥 | 🟡 中 | 移除默认值占位符，改为仅依赖 `.env` 环境变量 |
 | T7 | 无输入校验/认证/限流 | 🟢 低 | 本地应用暂可接受；若暴露到网络需加认证 |
 

@@ -175,7 +175,55 @@ html, body, #root {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2px;
-  transition: background 0.15s;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.session-item:hover .btn-archive,
+.session-item:hover .btn-unarchive {
+  opacity: 1 !important;
+}
+
+.session-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.session-item:hover .session-item-actions {
+  opacity: 1;
+}
+
+/* Archived sessions */
+.archived-section {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.archived-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.archived-summary:hover {
+  color: var(--accent);
+}
+
+.archived-list {
+  opacity: 0.7;
+}
+
+.archived-item {
+  font-style: italic;
+}
+
+.archived-item .session-title {
+  color: var(--text-secondary);
 }
 
 .session-item:hover, .domain-item:hover {

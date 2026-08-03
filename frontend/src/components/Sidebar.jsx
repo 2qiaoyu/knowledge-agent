@@ -22,11 +22,22 @@ export default function Sidebar() {
   const smartImportKnowledge = useStore((s) => s.smartImportKnowledge);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDarkMode = useStore((s) => s.toggleDarkMode);
+  const archivedSessions = useStore((s) => s.archivedSessions);
+  const fetchArchivedSessions = useStore((s) => s.fetchArchivedSessions);
+  const archiveSession = useStore((s) => s.archiveSession);
+  const unarchiveSession = useStore((s) => s.unarchiveSession);
 
   const [localSearch, setLocalSearch] = useState('');
   const [reclassifying, setReclassifying] = useState(false);
   const [smartImporting, setSmartImporting] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Load archived sessions when switching to sessions tab
+  React.useEffect(() => {
+    if (sidebarTab === 'sessions') {
+      fetchArchivedSessions();
+    }
+  }, [sidebarTab, fetchArchivedSessions]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -119,20 +130,67 @@ export default function Sidebar() {
                 onClick={() => loadSession(s.id)}
               >
                 <span className="session-title">{s.title}</span>
-                <button
-                  className="btn-delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(`确定删除对话「${s.title}」？`)) {
-                      deleteSession(s.id);
-                    }
-                  }}
-                >
-                  x
-                </button>
+                <div className="session-item-actions">
+                  <button
+                    className="btn-archive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      archiveSession(s.id);
+                    }}
+                    title="归档"
+                    style={{ opacity: 0, transition: 'opacity 0.15s', marginRight: '2px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '12px', color: 'var(--text-secondary)' }}
+                  >
+                    📦
+                  </button>
+                  <button
+                    className="btn-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`确定删除对话「${s.title}」？`)) {
+                        deleteSession(s.id);
+                      }
+                    }}
+                  >
+                    x
+                  </button>
+                </div>
               </li>
             ))}
+            {sessions.length === 0 && (
+              <li className="empty-hint">暂无对话</li>
+            )}
           </ul>
+
+          {/* Archived sessions */}
+          {archivedSessions && archivedSessions.length > 0 && (
+            <details className="archived-section">
+              <summary className="archived-summary">
+                已归档 ({archivedSessions.length})
+              </summary>
+              <ul className="session-list archived-list">
+                {archivedSessions.map((s) => (
+                  <li
+                    key={s.id}
+                    className="session-item archived-item"
+                    onClick={() => loadSession(s.id)}
+                  >
+                    <span className="session-title">{s.title}</span>
+                    <button
+                      className="btn-unarchive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        unarchiveSession(s.id);
+                      }}
+                      title="取消归档"
+                      style={{ opacity: 0, transition: 'opacity 0.15s', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '12px', color: 'var(--text-secondary)' }}
+                    >
+                      ↩
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 

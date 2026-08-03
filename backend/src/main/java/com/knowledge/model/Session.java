@@ -20,4 +20,6 @@ public class Session {
     private List<ChatMessage> messages = new ArrayList<>();
     private Instant createdAt;
     private Instant updatedAt;
+    @Builder.Default
+    private boolean archived = false;
 }

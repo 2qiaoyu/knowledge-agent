@@ -89,10 +89,66 @@ public class SessionService {
         return session;
     }
 
+    /**
+     * List active (non-archived) sessions, sorted by updatedAt descending.
+     */
     public List<Session> listSessions() {
         return sessions.values().stream()
+                .filter(s -> !s.isArchived())
                 .sorted(Comparator.comparing(Session::getUpdatedAt).reversed())
                 .toList();
+    }
+
+    /**
+     * List archived sessions, sorted by updatedAt descending.
+     */
+    public List<Session> listArchivedSessions() {
+        return sessions.values().stream()
+                .filter(Session::isArchived)
+                .sorted(Comparator.comparing(Session::getUpdatedAt).reversed())
+                .toList();
+    }
+
+    /**
+     * Archive a session (hide from main list, keep data).
+     */
+    public Session archiveSession(String id) {
+        Session session = getSession(id);
+        session.setArchived(true);
+        session.setUpdatedAt(Instant.now());
+        saveToFile();
+        return session;
+    }
+
+    /**
+     * Unarchive a session (restore to main list).
+     */
+    public Session unarchiveSession(String id) {
+        Session session = getSession(id);
+        session.setArchived(false);
+        session.setUpdatedAt(Instant.now());
+        saveToFile();
+        return session;
+    }
+
+    /**
+     * Auto-archive sessions older than the given number of days.
+     * Returns the number of sessions archived.
+     */
+    public int autoArchiveOldSessions(int days) {
+        Instant cutoff = Instant.now().minusSeconds(days * 86400L);
+        int count = 0;
+        for (Session s : sessions.values()) {
+            if (!s.isArchived() && s.getUpdatedAt().isBefore(cutoff)) {
+                s.setArchived(true);
+                count++;
+            }
+        }
+        if (count > 0) {
+            saveToFile();
+            log.info("Auto-archived {} sessions older than {} days", count, days);
+        }
+        return count;
     }
 
     public void addMessage(String sessionId, ChatMessage message) {

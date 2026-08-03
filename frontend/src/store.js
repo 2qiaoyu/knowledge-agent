@@ -112,6 +112,7 @@ function saveAssistantMessage(set, get, content, isAborted = false) {
 const useStore = create((set, get) => ({
   // Sessions
   sessions: [],
+  archivedSessions: [],
   currentSessionId: null,
 
   // Chat
@@ -170,6 +171,39 @@ const useStore = create((set, get) => ({
       set({ sessions });
     } catch (e) {
       console.error('Failed to fetch sessions', e);
+    }
+  },
+
+  fetchArchivedSessions: async () => {
+    try {
+      const res = await fetch('/api/sessions/archived');
+      const archivedSessions = await res.json();
+      set({ archivedSessions });
+    } catch (e) {
+      console.error('Failed to fetch archived sessions', e);
+    }
+  },
+
+  archiveSession: async (id) => {
+    try {
+      await fetch(`/api/sessions/${id}/archive`, { method: 'POST' });
+      set((s) => ({
+        sessions: s.sessions.filter((x) => x.id !== id),
+        archivedSessions: [{ id, archived: true }, ...(s.archivedSessions || [])],
+      }));
+    } catch (e) {
+      console.error('Failed to archive session', e);
+    }
+  },
+
+  unarchiveSession: async (id) => {
+    try {
+      await fetch(`/api/sessions/${id}/unarchive`, { method: 'POST' });
+      set((s) => ({
+        archivedSessions: (s.archivedSessions || []).filter((x) => x.id !== id),
+      }));
+    } catch (e) {
+      console.error('Failed to unarchive session', e);
     }
   },
 
