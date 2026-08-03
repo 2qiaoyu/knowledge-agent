@@ -150,19 +150,13 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 | T1 | Chroma 向量索引脏数据 | 使用 `FilterExpressionBuilder` 按 `domain + question` 元数据精确删除向量；新增 `reindexDomain()` 方法重建整个域索引 | `KnowledgeService.java`, `KnowledgeController.java` |
 | T5 | store.js SSE 逻辑重复 | 提取 `consumeStream()` + `saveAssistantMessage()` 共享函数；store.js 从 701 行减至 543 行（-22%） | `store.js` |
 | T2 | ChatMemory 纯内存且无界 | 设置 `MessageWindowChatMemory.maxMessages(20)`，保留最近 20 轮对话 | `ChatService.java` |
-
-### ✅ 本轮已修复（ChatMemory 窗口限制）
-
-| # | 问题 | 修复方案 | 改动文件 |
-|---|------|----------|----------|
-| T2 | ChatMemory 纯内存且无界 | 设置 `MessageWindowChatMemory.maxMessages(20)`，保留最近 20 轮对话 | `ChatService.java` |
+| T4 | 前端流式错误静默 | 增加 `chatError` store 状态；错误 banner 提示 + 重试按钮；保留已输出部分内容 | `store.js`, `ChatMessages.jsx`, `app.css` |
 
 ### ⏳ 待修复
 
 | # | 问题 | 严重度 | 建议方案 |
 |---|------|--------|----------|
 | T3 | sessions.json 无限增长 | 🟡 中 | 添加归档机制或定期清理；`GET /api/sessions` 增加分页 |
-| T4 | 前端流式错误静默 | 🟡 中 | store.js 中增加 `error` 状态 + UI 展示错误提示 + 重试按钮 |
 | T6 | application.yml 硬编码真实密钥 | 🟡 中 | 移除默认值占位符，改为仅依赖 `.env` 环境变量 |
 | T7 | 无输入校验/认证/限流 | 🟢 低 | 本地应用暂可接受；若暴露到网络需加认证 |
 

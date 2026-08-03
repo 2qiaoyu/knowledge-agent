@@ -4,6 +4,8 @@ import MarkdownViewer from './MarkdownViewer';
 
 export default function ChatMessages({ messages }) {
   const streaming = useStore((s) => s.streaming);
+  const chatError = useStore((s) => s.chatError);
+  const clearChatError = useStore((s) => s.clearChatError);
   const regenerate = useStore((s) => s.regenerate);
   const deleteMessage = useStore((s) => s.deleteMessage);
   const editMessage = useStore((s) => s.editMessage);
@@ -123,6 +125,20 @@ export default function ChatMessages({ messages }) {
         <div className="regenerate-bar">
           <button className="btn-regenerate" onClick={regenerate}>
             重新生成
+          </button>
+        </div>
+      )}
+      {chatError && (
+        <div className="chat-error-banner">
+          <span className="chat-error-icon">⚠</span>
+          <span className="chat-error-message">{chatError.message}</span>
+          {chatError.retryable && (
+            <button className="btn-retry" onClick={chatError.retry || regenerate}>
+              重试
+            </button>
+          )}
+          <button className="btn-dismiss-error" onClick={clearChatError} title="关闭">
+            ✕
           </button>
         </div>
       )}

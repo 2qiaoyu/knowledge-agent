@@ -75,13 +75,14 @@ async function consumeStream(response, set, get) {
     }
 
     flushStreaming();
-    return { content: fullContent, aborted: false };
+    return { content: fullContent, aborted: false, error: null };
   } catch (e) {
     if (e.name === 'AbortError') {
       flushStreaming();
-      return { content: fullContent, aborted: true };
+      return { content: fullContent, aborted: true, error: null };
     }
-    throw e;
+    flushStreaming();
+    return { content: fullContent, aborted: false, error: e.message || '网络连接失败' };
   }
 }
 
@@ -118,6 +119,7 @@ const useStore = create((set, get) => ({
   streaming: false,
   streamingContent: '',
   abortController: null,
+  chatError: null, // { message: string, retryable: boolean, retry: Function }
 
   // Settings
   enableWebSearch: false,
@@ -135,6 +137,9 @@ const useStore = create((set, get) => ({
 
   // UI
   sidebarTab: 'sessions', // 'sessions' | 'knowledge'
+
+  // Actions - Error handling
+  clearChatError: () => set({ chatError: null }),
 
   // Actions - Sessions
   setSessions: (sessions) => set({ sessions }),
@@ -190,7 +195,7 @@ const useStore = create((set, get) => ({
   sendMessage: async (content) => {
     const { currentSessionId, enableWebSearch, llmProvider } = get();
     const controller = new AbortController();
-    set({ streaming: true, streamingContent: '', abortController: controller });
+    set({ streaming: true, streamingContent: '', abortController: controller, chatError: null });
 
     const userMsg = { id: Date.now().toString(), role: 'user', content, timestamp: new Date().toISOString() };
     set((s) => ({ messages: [...s.messages, userMsg] }));
@@ -208,7 +213,36 @@ const useStore = create((set, get) => ({
         signal: controller.signal,
       });
 
-      const { content: fullContent, aborted } = await consumeStream(response, set, get);
+      // Check for HTTP errors before consuming stream
+      if (!response.ok) {
+        const errorMsg = response.status === 429
+          ? '请求过于频繁，请稍后再试'
+          : response.status >= 500
+            ? '服务器繁忙，请稍后再试'
+            : `请求失败 (${response.status})`;
+        set({
+          streaming: false,
+          abortController: null,
+          chatError: { message: errorMsg, retryable: true, retry: () => get().sendMessage(content) },
+        });
+        return;
+      }
+
+      const { content: fullContent, aborted, error } = await consumeStream(response, set, get);
+
+      // Stream-level error (network drop mid-stream, etc.)
+      if (error) {
+        // Save partial content as a failed message, preserving what we got
+        if (fullContent && fullContent.trim()) {
+          saveAssistantMessage(set, get, fullContent + '\n\n*(生成中断)*', false);
+        }
+        set({
+          streaming: false,
+          abortController: null,
+          chatError: { message: error, retryable: true, retry: () => get().sendMessage(content) },
+        });
+        return;
+      }
 
       if (aborted) {
         saveAssistantMessage(set, get, fullContent, true);
@@ -218,8 +252,17 @@ const useStore = create((set, get) => ({
       saveAssistantMessage(set, get, fullContent);
       get().fetchDomains();
     } catch (e) {
+      // Network failure (fetch itself failed)
       console.error('Chat error', e);
-      set({ streaming: false, abortController: null });
+      set({
+        streaming: false,
+        abortController: null,
+        chatError: {
+          message: '网络连接失败，请检查网络后重试',
+          retryable: true,
+          retry: () => get().sendMessage(content),
+        },
+      });
     }
   },
 
@@ -271,7 +314,7 @@ const useStore = create((set, get) => ({
 
     // 自动重新发送
     const controller = new AbortController();
-    set({ streaming: true, streamingContent: '', abortController: controller });
+    set({ streaming: true, streamingContent: '', abortController: controller, chatError: null });
 
     try {
       const response = await fetch('/api/chat/stream', {
@@ -286,7 +329,21 @@ const useStore = create((set, get) => ({
         signal: controller.signal,
       });
 
-      const { content: fullContent, aborted } = await consumeStream(response, set, get);
+      if (!response.ok) {
+        const errorMsg = response.status >= 500 ? '服务器繁忙，请稍后再试' : `请求失败 (${response.status})`;
+        set({ streaming: false, abortController: null, chatError: { message: errorMsg, retryable: true } });
+        return;
+      }
+
+      const { content: fullContent, aborted, error } = await consumeStream(response, set, get);
+
+      if (error) {
+        if (fullContent && fullContent.trim()) {
+          saveAssistantMessage(set, get, fullContent + '\n\n*(生成中断)*', false);
+        }
+        set({ streaming: false, abortController: null, chatError: { message: error, retryable: true } });
+        return;
+      }
 
       if (aborted) {
         saveAssistantMessage(set, get, fullContent, true);
@@ -297,7 +354,7 @@ const useStore = create((set, get) => ({
       get().fetchDomains();
     } catch (e) {
       console.error('Edit resend error', e);
-      set({ streaming: false, abortController: null });
+      set({ streaming: false, abortController: null, chatError: { message: '网络连接失败，请检查网络后重试', retryable: true } });
     }
   },
 
@@ -352,6 +409,7 @@ const useStore = create((set, get) => ({
       messages: s.messages.slice(0, lastAssistantIdx),
       streaming: true,
       streamingContent: '',
+      chatError: null,
     }));
 
     // 重新发送
@@ -371,7 +429,21 @@ const useStore = create((set, get) => ({
         signal: controller.signal,
       });
 
-      const { content: fullContent, aborted } = await consumeStream(response, set, get);
+      if (!response.ok) {
+        const errorMsg = response.status >= 500 ? '服务器繁忙，请稍后再试' : `请求失败 (${response.status})`;
+        set({ streaming: false, abortController: null, chatError: { message: errorMsg, retryable: true } });
+        return;
+      }
+
+      const { content: fullContent, aborted, error } = await consumeStream(response, set, get);
+
+      if (error) {
+        if (fullContent && fullContent.trim()) {
+          saveAssistantMessage(set, get, fullContent + '\n\n*(生成中断)*', false);
+        }
+        set({ streaming: false, abortController: null, chatError: { message: error, retryable: true } });
+        return;
+      }
 
       if (aborted) {
         saveAssistantMessage(set, get, fullContent, true);
@@ -382,7 +454,7 @@ const useStore = create((set, get) => ({
       get().fetchDomains();
     } catch (e) {
       console.error('Regenerate error', e);
-      set({ streaming: false, abortController: null });
+      set({ streaming: false, abortController: null, chatError: { message: '网络连接失败，请检查网络后重试', retryable: true } });
     }
   },
 
