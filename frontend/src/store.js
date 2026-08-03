@@ -137,9 +137,14 @@ const useStore = create((set, get) => ({
 
   // UI
   sidebarTab: 'sessions', // 'sessions' | 'knowledge'
+  darkMode: false,
 
   // Actions - Error handling
   clearChatError: () => set({ chatError: null }),
+
+  // Actions - Theme
+  toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
+  setDarkMode: (dark) => set({ darkMode: dark }),
 
   // Actions - Sessions
   setSessions: (sessions) => set({ sessions }),

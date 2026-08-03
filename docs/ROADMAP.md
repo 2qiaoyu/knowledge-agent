@@ -49,7 +49,7 @@
 | # | 功能 | 状态 | 说明 |
 |---|------|------|------|
 | 18 | 键盘快捷键 | ✅ 已完成 | Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成 |
-| 19 | 暗色模式 | ⏳ 待开发 | CSS Variables 已预留，添加 dark theme 切换 |
+| 19 | 暗色模式 | ✅ 已完成 | 使用 [data-theme="dark"] + CSS 变量，支持系统偏好检测，选择持久化到 localStorage |
 | 20 | 代码块复制按钮 | ✅ 已完成 | 代码块头部右侧添加"复制"按钮，点击后变"✓ 已复制" |
 | 21 | 消息操作菜单 | ✅ 已完成 | 悬浮 ⋯ 按钮展开下拉菜单：复制/编辑/删除 |
 | 22 | 知识图谱 | ⏳ 待开发 | 可视化展示知识域之间的关系 |
@@ -153,6 +153,7 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 | T4 | 前端流式错误静默 | 增加 `chatError` store 状态；错误 banner 提示 + 重试按钮；保留已输出部分内容 | `store.js`, `ChatMessages.jsx`, `app.css` |
 | 18 | 键盘快捷键 | Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成（输入框聚焦时不触发） | `App.jsx` |
 | 21 | 消息操作菜单 | 悬浮 ⋯ 按钮展开下拉菜单（复制/编辑/删除），带复制成功反馈 | `ChatMessages.jsx`, `app.css` |
+| 19 | 暗色模式 | [data-theme="dark"] + CSS 变量，支持系统偏好检测，localStorage 持久化 | `App.jsx`, `Sidebar.jsx`, `app.css` |
 
 ### ⏳ 待修复
 

@@ -11,6 +11,29 @@ export default function App() {
   const stopGeneration = useStore((s) => s.stopGeneration);
   const streaming = useStore((s) => s.streaming);
   const setSidebarTab = useStore((s) => s.setSidebarTab);
+  const darkMode = useStore((s) => s.darkMode);
+  const setDarkMode = useStore((s) => s.setDarkMode);
+
+  // Initialize theme from localStorage or system preference
+  useEffect(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark' || saved === 'light') {
+      setDarkMode(saved === 'dark');
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setDarkMode(true);
+    }
+  }, [setDarkMode]);
+
+  // Sync theme to document element and localStorage
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e) => {

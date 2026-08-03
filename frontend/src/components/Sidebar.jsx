@@ -20,6 +20,8 @@ export default function Sidebar() {
   const reclassifyDomains = useStore((s) => s.reclassifyDomains);
   const exportKnowledgeBase = useStore((s) => s.exportKnowledgeBase);
   const smartImportKnowledge = useStore((s) => s.smartImportKnowledge);
+  const darkMode = useStore((s) => s.darkMode);
+  const toggleDarkMode = useStore((s) => s.toggleDarkMode);
 
   const [localSearch, setLocalSearch] = useState('');
   const [reclassifying, setReclassifying] = useState(false);
@@ -239,6 +241,11 @@ export default function Sidebar() {
               </ul>
             </>
           )}
+
+          {/* Theme toggle at bottom of sidebar */}
+          <button className="btn-theme-toggle" onClick={toggleDarkMode} title="切换主题">
+            {darkMode ? '☀ 浅色' : '🌙 深色'}
+          </button>
         </div>
       )}
     </aside>
