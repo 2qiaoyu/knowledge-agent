@@ -27,6 +27,9 @@ public class ChatService {
     /** 知识库检索返回的最大条数 */
     private static final int KNOWLEDGE_TOP_K = 3;
 
+    /** 多轮对话记忆窗口大小（保留最近 N 轮 = N 条 user + N 条 assistant） */
+    private static final int MEMORY_MAX_MESSAGES = 20;
+
     private final ChatClient defaultChatClient;
     private final ChatClient deepseekChatClient;
     private final ChatClient longcatChatClient;
@@ -49,6 +52,7 @@ public class ChatService {
         this.webSearchService = webSearchService;
         this.chatMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(new InMemoryChatMemoryRepository())
+                .maxMessages(MEMORY_MAX_MESSAGES)
                 .build();
     }
 
