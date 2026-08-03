@@ -11,6 +11,7 @@ import org.springframework.ai.chat.client.ChatClient;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -173,5 +174,178 @@ class KnowledgeServiceTest {
         String domain = knowledgeService.classifyDomain("查询");
 
         assertEquals("通用知识", domain);
+    }
+
+    @Test
+    void exportAllDomains_shouldReturnAllDomainContents() {
+        knowledgeService.appendEntry("域A", "Q1", "A1", null);
+        knowledgeService.appendEntry("域B", "Q2", "A2", null);
+
+        Map<String, String> exported = knowledgeService.exportAllDomains();
+
+        assertEquals(2, exported.size());
+        assertTrue(exported.containsKey("域A"));
+        assertTrue(exported.containsKey("域B"));
+        assertTrue(exported.get("域A").contains("## Q: Q1"));
+        assertTrue(exported.get("域B").contains("## Q: Q2"));
+    }
+
+    @Test
+    void exportAllDomains_shouldReturnEmptyForNoDomains() {
+        Map<String, String> exported = knowledgeService.exportAllDomains();
+        assertTrue(exported.isEmpty());
+    }
+
+    @Test
+    void importEntries_shouldParseAndAppendEntries() {
+        String markdown = """
+                # 知识域: 导入测试域
+
+                ## Q: 导入问题1
+
+                **日期**: 2025-01-01 10:00
+
+                这是第一个导入的回答
+
+                ---
+
+                ## Q: 导入问题2
+
+                **日期**: 2025-01-02 12:00 | **来源**: [来源链接](https://example.com)
+
+                这是第二个导入的回答
+
+                ---
+                """;
+
+        int count = knowledgeService.importEntries("导入测试域", markdown);
+
+        assertEquals(2, count);
+        String content = knowledgeService.getKnowledgeContent("导入测试域");
+        assertTrue(content.contains("## Q: 导入问题1"));
+        assertTrue(content.contains("这是第一个导入的回答"));
+        assertTrue(content.contains("## Q: 导入问题2"));
+        assertTrue(content.contains("这是第二个导入的回答"));
+        // Verify vector store was called for each entry
+        verify(vectorStore, times(2)).add(any(List.class));
+    }
+
+    @Test
+    void importEntries_shouldReturnZeroForEmptyContent() {
+        assertEquals(0, knowledgeService.importEntries("空域", ""));
+        assertEquals(0, knowledgeService.importEntries("空域", null));
+        assertEquals(0, knowledgeService.importEntries("空域", "   \n  "));
+    }
+
+    @Test
+    void importEntries_shouldImportSimpleFormatWithoutDateLine() {
+        String markdown = """
+                ## Q: 简单格式问题1
+
+                这是第一个简单格式的回答
+
+                ---
+
+                ## Q: 简单格式问题2
+
+                这是第二个简单格式的回答
+                ---
+                """;
+
+        int count = knowledgeService.importEntries("简单格式域", markdown);
+
+        assertEquals(2, count);
+        String content = knowledgeService.getKnowledgeContent("简单格式域");
+        assertTrue(content.contains("## Q: 简单格式问题1"));
+        assertTrue(content.contains("这是第一个简单格式的回答"));
+        assertTrue(content.contains("## Q: 简单格式问题2"));
+        assertTrue(content.contains("这是第二个简单格式的回答"));
+    }
+
+    @Test
+    void importEntries_shouldHandleMixedFormats() {
+        String markdown = """
+                ## Q: 有日期的问题
+
+                **日期**: 2025-01-01 10:00
+
+                有日期的回答
+
+                ---
+
+                ## Q: 无日期的问题
+
+                无日期的回答
+
+                ---
+                """;
+
+        int count = knowledgeService.importEntries("混合格式域", markdown);
+
+        assertEquals(2, count);
+        String content = knowledgeService.getKnowledgeContent("混合格式域");
+        assertTrue(content.contains("## Q: 有日期的问题"));
+        assertTrue(content.contains("## Q: 无日期的问题"));
+    }
+
+    @Test
+    void importQAPairs_shouldInsertPairsAsEntries() {
+        // Test the second step of smart import: inserting LLM-extracted Q&A pairs
+        List<KnowledgeService.QAPair> pairs = List.of(
+                new KnowledgeService.QAPair("什么是 Docker？", "Docker 是一个应用打包工具。"),
+                new KnowledgeService.QAPair("Docker 的优点", "快速安装、大量镜像。")
+        );
+
+        int count = knowledgeService.importQAPairs("智能导入域", pairs);
+
+        assertEquals(2, count);
+        String content = knowledgeService.getKnowledgeContent("智能导入域");
+        assertTrue(content.contains("## Q: 什么是 Docker？"));
+        assertTrue(content.contains("Docker 是一个应用打包工具。"));
+        assertTrue(content.contains("## Q: Docker 的优点"));
+        assertTrue(content.contains("快速安装、大量镜像。"));
+        verify(vectorStore, times(2)).add(any(List.class));
+    }
+
+    @Test
+    void importEntries_shouldParseHeadingAsQuestionFormat() {
+        // 模拟用户粘贴的 Markdown 笔记：## 标题作为 Q，正文作为 A
+        String markdown = """
+                # Docker
+
+                Docker 是一个应用打包、分发、部署的工具。
+
+                ## 原理
+
+                Docker 使用容器技术实现资源隔离...
+
+                ## 下载
+
+                https://docs.docker.com/desktop/release-notes/
+
+                ## 打包、分发、部署
+
+                打包：把软件运行所需的依赖打包到一起
+                分发：上传到镜像仓库
+                部署：一个命令运行应用
+
+                ## Docker 安装的优点
+
+                - 一个命令就可以安装好
+                - 有大量的镜像可直接使用
+                - 没有系统兼容问题
+                """;
+
+        int count = knowledgeService.importEntries("Docker", markdown);
+
+        assertEquals(4, count);
+        String content = knowledgeService.getKnowledgeContent("Docker");
+        assertTrue(content.contains("## Q: 原理"));
+        assertTrue(content.contains("Docker 使用容器技术"));
+        assertTrue(content.contains("## Q: 下载"));
+        assertTrue(content.contains("docs.docker.com"));
+        assertTrue(content.contains("## Q: 打包、分发、部署"));
+        assertTrue(content.contains("## Q: Docker 安装的优点"));
+        assertTrue(content.contains("一个命令就可以安装好"));
     }
 }

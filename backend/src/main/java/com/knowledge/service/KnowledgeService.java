@@ -9,6 +9,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -475,6 +477,11 @@ public class KnowledgeService {
 
     public record SearchResult(String domain, String question, String answer) {}
 
+    /**
+     * Represents a Q&A pair extracted by LLM during smart import.
+     */
+    public record QAPair(String question, String answer) {}
+
     // ---- Entry management (parse/edit/delete individual Q&A entries) ----
 
     private static final Pattern SOURCES_PATTERN = Pattern.compile("\\| \\*\\*来源\\*\\*: (.+)", Pattern.DOTALL);
@@ -683,18 +690,422 @@ public class KnowledgeService {
     }
 
     private void reindexEntry(String domain, String oldQuestion, String newQuestion, String newAnswer) {
-        // Note: Chroma doesn't support easy deletion by metadata, so we just add the new version.
-        // Old entries will have lower similarity scores naturally.
+        // Remove old vector entry by metadata filter, then add the updated one
+        removeFromIndex(domain, oldQuestion);
         indexEntry(domain, newQuestion, newAnswer, null);
     }
 
+    /**
+     * Remove a vector entry from Chroma by domain + question metadata filter.
+     * Uses Spring AI's FilterExpressionBuilder to construct a where clause.
+     */
     private void removeFromIndex(String domain, String question) {
-        // Chroma vector store doesn't easily support deletion by metadata filter
-        // For now, the old entry remains but will have lower relevance scores
-        log.debug("Note: Old vector entry for '{}' in '{}' not removed (Chroma limitation)", question, domain);
+        try {
+            Filter.Expression filter = new FilterExpressionBuilder()
+                    .and(
+                            new FilterExpressionBuilder().eq("domain", domain),
+                            new FilterExpressionBuilder().eq("question", question)
+                    )
+                    .build();
+            vectorStore.delete(filter);
+            log.debug("Removed vector entry for '{}' in domain '{}'", question, domain);
+        } catch (Exception e) {
+            log.warn("Failed to remove vector entry for '{}' in '{}': {}", question, domain, e.getMessage());
+        }
+    }
+
+    /**
+     * Rebuild the entire vector index for a domain from its Markdown file.
+     * Useful for cleaning up stale entries after manual file edits or as a recovery tool.
+     *
+     * @return the number of entries re-indexed
+     */
+    public int reindexDomain(String domain) {
+        // Delete all vectors for this domain
+        try {
+            Filter.Expression domainFilter = new FilterExpressionBuilder().eq("domain", domain).build();
+            vectorStore.delete(domainFilter);
+            log.debug("Cleared all vectors for domain '{}'", domain);
+        } catch (Exception e) {
+            log.warn("Failed to clear vectors for domain '{}': {}", domain, e.getMessage());
+        }
+
+        // Re-index all entries from the authoritative Markdown file
+        List<EntryRef> entries = listEntries(domain);
+        for (EntryRef entry : entries) {
+            indexEntry(domain, entry.question(), entry.answer(), null);
+        }
+        log.info("Re-indexed {} entries for domain '{}'", entries.size(), domain);
+        return entries.size();
     }
 
     public record EntryRef(String id, String question, String answer, String sources, int start, int end) {}
+
+    // ---- Import / Export ----
+
+    /**
+     * Read all domain Markdown files and return them as a map of domain name to content.
+     * Used for exporting the entire knowledge base as a zip archive.
+     */
+    public Map<String, String> exportAllDomains() {
+        Map<String, String> result = new LinkedHashMap<>();
+        List<String> domains = listDomains();
+        for (String domain : domains) {
+            String content = getKnowledgeContent(domain);
+            if (content != null && !content.isEmpty()) {
+                result.put(domain, content);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Parse a Markdown string containing Q&A entries and append them to the specified domain.
+     * Supports three formats:
+     *   1. Q&A format (produced by appendEntry()):
+     *      ## Q: question
+     *      **日期**: ... | **来源**: ...
+     *      answer
+     *      ---
+     *
+     *   2. Heading-as-Q format (## heading as question, body as answer):
+     *      ## 标题
+     *      内容...
+     *
+     *   3. Simple Q&A without date line:
+     *      ## Q: question
+     *      answer
+     *      ---
+     *
+     * @return the number of entries successfully imported
+     */
+    public int importEntries(String domain, String markdownContent) {
+        if (markdownContent == null || markdownContent.isBlank()) return 0;
+
+        // Detect format: if any entries use "## Q: " prefix, treat as Q&A format
+        // (with or without date lines). Otherwise, fall back to heading-as-Q format.
+        boolean hasQPrefix = markdownContent.contains("## Q: ");
+        if (hasQPrefix) {
+            return parseQAFormat(domain, markdownContent);
+        }
+
+        // Heading-as-Q format: any "## heading" becomes a question, body becomes answer
+        return parseHeadingFormat(domain, markdownContent);
+    }
+
+    /**
+     * Parse Q&A format entries (## Q: question ... **日期**: ...).
+     */
+    private int parseQAFormat(String domain, String markdownContent) {
+        String[] chunks = markdownContent.split("(?=## Q: )");
+        int imported = 0;
+
+        for (String chunk : chunks) {
+            if (!chunk.startsWith("## Q: ")) continue;
+
+            int qStart = 6; // length of "## Q: "
+            int qEnd = chunk.indexOf("\n", qStart);
+            if (qEnd < 0) continue;
+            String question = chunk.substring(qStart, qEnd).trim();
+            if (question.isEmpty()) continue;
+
+            int dateIdx = chunk.indexOf("**日期**:");
+            String sources = "";
+            int answerStart;
+
+            if (dateIdx >= 0) {
+                int dateLineEnd = chunk.indexOf("\n", dateIdx);
+                if (dateLineEnd < 0) dateLineEnd = chunk.length();
+                String dateLine = chunk.substring(dateIdx, dateLineEnd);
+
+                Matcher sourcesMatcher = SOURCES_PATTERN.matcher(dateLine);
+                if (sourcesMatcher.find()) {
+                    sources = sourcesMatcher.group(1).trim();
+                }
+                answerStart = dateLineEnd;
+            } else {
+                answerStart = qEnd;
+            }
+
+            while (answerStart < chunk.length() && chunk.charAt(answerStart) == '\n') answerStart++;
+
+            String answer = extractAnswer(chunk, answerStart);
+            if (answer.isEmpty()) continue;
+
+            List<Citation> citations = parseCitations(sources);
+            appendEntry(domain, question, answer, citations);
+            imported++;
+        }
+
+        logImportResult(domain, imported);
+        return imported;
+    }
+
+    /**
+     * Parse heading-as-Q format: "## heading" as question, body until next "##" as answer.
+     * Skips H1 (# title) and entries with empty body.
+     */
+    private int parseHeadingFormat(String domain, String markdownContent) {
+        // Split at any "## " heading (H2 or lower)
+        String[] chunks = markdownContent.split("(?=## )");
+        int imported = 0;
+
+        for (String chunk : chunks) {
+            // Skip H1 headings (they are document titles, not Q&A entries)
+            if (chunk.startsWith("# ") || chunk.startsWith("#\n")) continue;
+            if (!chunk.startsWith("## ")) continue;
+
+            // Extract heading text (the question)
+            int headEnd = chunk.indexOf("\n");
+            if (headEnd < 0) continue; // heading only, no body
+            String heading = chunk.substring(3, headEnd).trim(); // skip "## "
+            if (heading.isEmpty()) continue;
+
+            // Skip if this is a "## Q: " that didn't have a date line (handled by fallback)
+            // or known non-Q headings like "参考来源"
+            if (heading.equals("参考来源")) continue;
+
+            // Body is everything after the heading line
+            int bodyStart = headEnd;
+            while (bodyStart < chunk.length() && chunk.charAt(bodyStart) == '\n') bodyStart++;
+
+            String answer = extractAnswer(chunk, bodyStart);
+            if (answer.isEmpty()) continue;
+
+            appendEntry(domain, heading, answer, null);
+            imported++;
+        }
+
+        logImportResult(domain, imported);
+        return imported;
+    }
+
+    /**
+     * Extract answer text from a chunk, removing trailing --- and references section.
+     */
+    private String extractAnswer(String chunk, int answerStart) {
+        if (answerStart >= chunk.length()) return "";
+
+        String answer = chunk.substring(answerStart);
+        Matcher refMatcher = REFERENCES_PATTERN.matcher(answer);
+        if (refMatcher.find()) {
+            answer = answer.substring(0, refMatcher.start()).trim();
+        } else {
+            if (answer.endsWith("\n---")) {
+                answer = answer.substring(0, answer.length() - 4).trim();
+            } else if (answer.endsWith("---")) {
+                answer = answer.substring(0, answer.length() - 3).trim();
+            }
+        }
+        return answer;
+    }
+
+    private void logImportResult(String domain, int imported) {
+        if (imported == 0) {
+            log.warn("importEntries: no valid entries found in provided markdown for domain '{}'", domain);
+        } else {
+            log.info("importEntries: imported {} entries into domain '{}'", imported, domain);
+        }
+    }
+
+    // ---- Smart Import (LLM-powered) ----
+
+    /**
+     * Smart import with automatic domain classification.
+     * LLM extracts Q&A pairs AND determines the best domain for the content.
+     *
+     * @param content     raw Markdown content to extract Q&A from
+     * @param targetDomain if non-null, import into this domain; if null, auto-classify
+     * @return SmartImportResult containing the domain and Q&A pairs
+     */
+    public SmartImportResult smartImportWithClassification(String content, String targetDomain) {
+        if (content == null || content.isBlank()) {
+            return new SmartImportResult(targetDomain != null ? targetDomain : "通用知识", List.of());
+        }
+
+        // Step 1: Use LLM to classify domain (if not specified) and extract Q&A pairs
+        String domain = targetDomain;
+        if (domain == null) {
+            domain = classifyDomainForContent(content);
+        }
+
+        // Step 2: Get existing entries for context (to avoid duplicates)
+        List<EntryRef> existing = listEntries(domain);
+        String existingSummary = existing.stream()
+                .limit(10)
+                .map(e -> "- " + e.question())
+                .collect(Collectors.joining("\n"));
+
+        String prompt = """
+                你是一个知识库整理助手。请从以下 Markdown 内容中提炼出高质量的 Q&A 条目。
+
+                %s
+
+                要求：
+                1. 仔细阅读全文，理解内容的整体结构和逻辑关系
+                2. 将相关内容合并为主题明确的 Q&A 对（不要把每个小标题单独拆成一条，而是把相关联的内容合并）
+                3. 问题要完整、自包含（不依赖上下文就能理解），用疑问句或"什么是..."/"如何..."/"为什么..."等形式
+                4. 回答要详尽、通顺，包含必要的细节和示例，不要碎片化
+                5. 跳过目录、链接列表、参考来源等非知识性内容
+                6. 如果内容与已有条目高度相似，请合并或更新，而不是重复创建
+                7. 提炼出 3-10 个高质量的 Q&A 对（宁可少而精，不要多而碎）
+
+                请以 JSON 数组格式返回，每个元素包含 question 和 answer 字段：
+                [
+                  {"question": "问题1", "answer": "回答1"},
+                  {"question": "问题2", "answer": "回答2"}
+                ]
+
+                只返回 JSON 数组，不要任何解释或 Markdown 包裹。
+
+                待整理内容：
+                ```
+                %s
+                ```
+
+                Q&A JSON：
+                """.formatted(
+                existingSummary.isEmpty() ? "（该知识域暂无已有条目）" : "该知识域已有条目：\n" + existingSummary,
+                content.length() > 8000 ? content.substring(0, 8000) : content
+        );
+
+        try {
+            String response = chatClient.prompt().user(prompt).call().content();
+            List<QAPair> pairs = parseQAPairs(response);
+            log.info("Smart import for domain '{}': extracted {} Q&A pairs", domain, pairs.size());
+            return new SmartImportResult(domain, pairs);
+        } catch (Exception e) {
+            log.error("Smart import failed: {}", e.getMessage(), e);
+            throw new RuntimeException("智能导入失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Classify content into an existing domain or suggest a new one.
+     * Uses the first ~1000 chars as a summary for classification.
+     */
+    private String classifyDomainForContent(String content) {
+        // Extract title (first H1 or first line) and a content summary
+        String title = "";
+        String summary = content.length() > 1000 ? content.substring(0, 1000) : content;
+
+        // Try to find the first H1 heading as title
+        int h1Idx = content.indexOf("# ");
+        if (h1Idx >= 0) {
+            int lineEnd = content.indexOf("\n", h1Idx);
+            if (lineEnd > 0) {
+                title = content.substring(h1Idx + 2, lineEnd).trim();
+            }
+        }
+
+        List<String> existingDomains = listDomains();
+        String domainList = existingDomains.isEmpty() ? "（暂无）" : String.join(", ", existingDomains);
+
+        String prompt = """
+                根据以下内容的标题和摘要，判断它属于哪个知识域。
+
+                现有知识域：%s
+
+                内容标题：%s
+                内容摘要：%s
+
+                分类规则：
+                1. 如果内容与某个现有知识域高度相关，返回该知识域的原有名称
+                2. 如果是全新主题，创建一个新的知识域名称（2-5个中文字，简洁明确，如"Docker""Spring Boot""机器学习"）
+                3. 只返回知识域名称，不要任何解释或标点
+
+                知识域名称：
+                """.formatted(domainList, title, summary.length() > 500 ? summary.substring(0, 500) : summary);
+
+        try {
+            String result = chatClient.prompt().user(prompt).call().content();
+            String domain = result != null ? result.trim() : "";
+            if (domain.isEmpty()) {
+                log.warn("Domain classification returned empty, falling back to 通用知识");
+                return "通用知识";
+            }
+            log.info("Auto-classified content into domain: {}", domain);
+            return domain;
+        } catch (Exception e) {
+            log.warn("Domain classification failed: {}, falling back to 通用知识", e.getMessage());
+            return "通用知识";
+        }
+    }
+
+    /**
+     * Result of smart import: contains the target domain and extracted Q&A pairs.
+     */
+    public record SmartImportResult(String domain, List<QAPair> pairs) {}
+
+    /**
+     * Parse LLM response into a list of QAPair objects.
+     * Handles JSON arrays, with or without markdown code fences.
+     */
+    @SuppressWarnings("unchecked")
+    private List<QAPair> parseQAPairs(String llmResponse) {
+        if (llmResponse == null || llmResponse.isBlank()) return List.of();
+
+        try {
+            String json = llmResponse.trim();
+
+            // Strip markdown code fences if present
+            if (json.contains("```")) {
+                int start = json.indexOf("```");
+                int end = json.lastIndexOf("```");
+                if (end > start) {
+                    String block = json.substring(start + 3, end);
+                    // Remove optional language tag
+                    json = block.replaceFirst("(?m)^json\\s*", "").trim();
+                }
+            }
+
+            // Parse JSON array
+            List<Map<String, Object>> items = new ObjectMapper().readValue(json, List.class);
+            List<QAPair> pairs = new ArrayList<>();
+            for (Map<String, Object> item : items) {
+                String question = (String) item.get("question");
+                String answer = (String) item.get("answer");
+                if (question != null && !question.isBlank() && answer != null && !answer.isBlank()) {
+                    pairs.add(new QAPair(question.trim(), answer.trim()));
+                }
+            }
+            return pairs;
+        } catch (Exception e) {
+            log.warn("Failed to parse LLM Q&A response: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Import Q&A pairs extracted by smartImport into the domain.
+     * Each pair is appended as a new knowledge entry.
+     *
+     * @return the number of entries imported
+     */
+    public int importQAPairs(String domain, List<QAPair> pairs) {
+        int count = 0;
+        for (QAPair pair : pairs) {
+            appendEntry(domain, pair.question(), pair.answer(), null);
+            count++;
+        }
+        log.info("Imported {} Q&A pairs into domain '{}'", count, domain);
+        return count;
+    }
+
+    /**
+     * Parse a sources string in format "[title](url), [title](url)" into Citation objects.
+     */
+    private List<Citation> parseCitations(String sources) {
+        List<Citation> citations = new ArrayList<>();
+        if (sources == null || sources.isBlank()) return citations;
+
+        Pattern citationPattern = Pattern.compile("\\[([^]]+)\\]\\(([^)]+)\\)");
+        Matcher matcher = citationPattern.matcher(sources);
+        while (matcher.find()) {
+            citations.add(Citation.builder().title(matcher.group(1)).url(matcher.group(2)).build());
+        }
+        return citations;
+    }
 
     public void deleteDomain(String domain) {
         try {

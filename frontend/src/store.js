@@ -1,6 +1,113 @@
 import { create } from 'zustand';
 import { parseSSEBuffer } from './sse';
 
+/**
+ * Consume an SSE stream and update streaming state.
+ * Handles [SESSION_ID:xxx] and [DONE] control messages internally.
+ *
+ * @param {Response} response - fetch Response with SSE body
+ * @param {Function} set - Zustand set
+ * @param {Function} get - Zustand get
+ * @returns {Promise<{ content: string, aborted: boolean }>} full content + whether user aborted
+ */
+async function consumeStream(response, set, get) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullContent = '';
+  let streamEnded = false;
+  let debounceTimer = null;
+  const DEBOUNCE_MS = 40;
+
+  const flushStreaming = () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    set({ streamingContent: fullContent });
+  };
+
+  const scheduleStreamingFlush = () => {
+    if (debounceTimer) return;
+    debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
+  };
+
+  const handleEvent = (data) => {
+    if (data === '[DONE]') {
+      streamEnded = true;
+      flushStreaming();
+      return;
+    }
+    if (data.startsWith('[SESSION_ID:')) {
+      const sid = data.slice(13, -1);
+      set({ currentSessionId: sid });
+      get().fetchSessions();
+      return;
+    }
+    fullContent += data;
+    scheduleStreamingFlush();
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const { events, remainder } = parseSSEBuffer(buffer);
+      buffer = remainder;
+
+      for (const data of events) {
+        if (!data) continue;
+        handleEvent(data);
+        if (streamEnded) break;
+      }
+      if (streamEnded) break;
+    }
+
+    if (!streamEnded && buffer.trim()) {
+      const { events } = parseSSEBuffer(`${buffer}\n\n`);
+      for (const data of events) {
+        if (!data) continue;
+        handleEvent(data);
+        if (streamEnded) break;
+      }
+    }
+
+    flushStreaming();
+    return { content: fullContent, aborted: false };
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      flushStreaming();
+      return { content: fullContent, aborted: true };
+    }
+    throw e;
+  }
+}
+
+/**
+ * Save partial or full streamed content as an assistant message.
+ * Shared by sendMessage, editMessage, and regenerate.
+ */
+function saveAssistantMessage(set, get, content, isAborted = false) {
+  if (!content || !content.trim()) return false;
+  const finalContent = isAborted ? content + '\n\n*(已停止生成)*' : content;
+  const assistantMsg = {
+    id: (Date.now() + 1).toString(),
+    role: 'assistant',
+    content: finalContent,
+    timestamp: new Date().toISOString(),
+  };
+  set((s) => ({
+    messages: [...s.messages, assistantMsg],
+    streamingContent: '',
+    streaming: false,
+    abortController: null,
+  }));
+  get().fetchSessions();
+  return true;
+}
+
 const useStore = create((set, get) => ({
   // Sessions
   sessions: [],
@@ -101,108 +208,16 @@ const useStore = create((set, get) => ({
         signal: controller.signal,
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullContent = '';
+      const { content: fullContent, aborted } = await consumeStream(response, set, get);
 
-      let streamEnded = false;
-      let debounceTimer = null;
-      const DEBOUNCE_MS = 40; // react-markdown 渲染更快，使用更短的 debounce
-
-      const flushStreaming = () => {
-        if (debounceTimer) {
-          clearTimeout(debounceTimer);
-          debounceTimer = null;
-        }
-        set({ streamingContent: fullContent });
-      };
-
-      const scheduleStreamingFlush = () => {
-        if (debounceTimer) return;
-        debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
-      };
-
-      const handleEvent = (data) => {
-        if (data === '[DONE]') {
-          streamEnded = true;
-          flushStreaming(); // 刷新全部内容
-          return;
-        }
-        if (data.startsWith('[SESSION_ID:')) {
-          const sid = data.slice(13, -1);
-          set({ currentSessionId: sid });
-          get().fetchSessions();
-          return;
-        }
-        fullContent += data;
-        scheduleStreamingFlush();
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const { events, remainder } = parseSSEBuffer(buffer);
-        buffer = remainder;
-
-        for (const data of events) {
-          if (!data) continue;
-          handleEvent(data);
-          if (streamEnded) break;
-        }
-        if (streamEnded) break;
+      if (aborted) {
+        saveAssistantMessage(set, get, fullContent, true);
+        return;
       }
 
-      if (!streamEnded && buffer.trim()) {
-        const { events } = parseSSEBuffer(`${buffer}\n\n`);
-        for (const data of events) {
-          if (!data) continue;
-          handleEvent(data);
-          if (streamEnded) break;
-        }
-      }
-
-      flushStreaming();
-
-      // Add assistant message
-      const assistantMsg = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: fullContent,
-        timestamp: new Date().toISOString(),
-      };
-      set((s) => ({
-        messages: [...s.messages, assistantMsg],
-        streamingContent: '',
-        streaming: false,
-      }));
-
-      // Refresh session list
-      get().fetchSessions();
-      // Refresh knowledge domains
+      saveAssistantMessage(set, get, fullContent);
       get().fetchDomains();
     } catch (e) {
-      if (e.name === 'AbortError') {
-        // 用户主动停止生成，将已有内容作为完整回复保存
-        if (fullContent && fullContent.trim()) {
-          const assistantMsg = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: fullContent + '\n\n*(已停止生成)*',
-            timestamp: new Date().toISOString(),
-          };
-          set((s) => ({
-            messages: [...s.messages, assistantMsg],
-            streamingContent: '',
-            streaming: false,
-            abortController: null,
-          }));
-          get().fetchSessions();
-          return;
-        }
-      }
       console.error('Chat error', e);
       set({ streaming: false, abortController: null });
     }
@@ -271,102 +286,16 @@ const useStore = create((set, get) => ({
         signal: controller.signal,
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullContent = '';
+      const { content: fullContent, aborted } = await consumeStream(response, set, get);
 
-      let streamEnded = false;
-      let debounceTimer = null;
-      const DEBOUNCE_MS = 40;
-
-      const flushStreaming = () => {
-        if (debounceTimer) {
-          clearTimeout(debounceTimer);
-          debounceTimer = null;
-        }
-        set({ streamingContent: fullContent });
-      };
-
-      const scheduleStreamingFlush = () => {
-        if (debounceTimer) return;
-        debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
-      };
-
-      const handleEvent = (data) => {
-        if (data === '[DONE]') {
-          streamEnded = true;
-          flushStreaming();
-          return;
-        }
-        if (data.startsWith('[SESSION_ID:')) {
-          const sid = data.slice(13, -1);
-          set({ currentSessionId: sid });
-          get().fetchSessions();
-          return;
-        }
-        fullContent += data;
-        scheduleStreamingFlush();
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const { events, remainder } = parseSSEBuffer(buffer);
-        buffer = remainder;
-        for (const data of events) {
-          if (!data) continue;
-          handleEvent(data);
-          if (streamEnded) break;
-        }
-        if (streamEnded) break;
+      if (aborted) {
+        saveAssistantMessage(set, get, fullContent, true);
+        return;
       }
 
-      if (!streamEnded && buffer.trim()) {
-        const { events } = parseSSEBuffer(`${buffer}\n\n`);
-        for (const data of events) {
-          if (!data) continue;
-          handleEvent(data);
-          if (streamEnded) break;
-        }
-      }
-
-      flushStreaming();
-
-      const assistantMsg = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: fullContent,
-        timestamp: new Date().toISOString(),
-      };
-      set((s) => ({
-        messages: [...s.messages, assistantMsg],
-        streamingContent: '',
-        streaming: false,
-      }));
-
-      get().fetchSessions();
+      saveAssistantMessage(set, get, fullContent);
       get().fetchDomains();
     } catch (e) {
-      if (e.name === 'AbortError') {
-        if (fullContent && fullContent.trim()) {
-          const assistantMsg = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: fullContent + '\n\n*(已停止生成)*',
-            timestamp: new Date().toISOString(),
-          };
-          set((s) => ({
-            messages: [...s.messages, assistantMsg],
-            streamingContent: '',
-            streaming: false,
-            abortController: null,
-          }));
-          get().fetchSessions();
-          return;
-        }
-      }
       console.error('Edit resend error', e);
       set({ streaming: false, abortController: null });
     }
@@ -442,103 +371,16 @@ const useStore = create((set, get) => ({
         signal: controller.signal,
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullContent = '';
+      const { content: fullContent, aborted } = await consumeStream(response, set, get);
 
-      let streamEnded = false;
-      let debounceTimer = null;
-      const DEBOUNCE_MS = 40;
-
-      const flushStreaming = () => {
-        if (debounceTimer) {
-          clearTimeout(debounceTimer);
-          debounceTimer = null;
-        }
-        set({ streamingContent: fullContent });
-      };
-
-      const scheduleStreamingFlush = () => {
-        if (debounceTimer) return;
-        debounceTimer = setTimeout(flushStreaming, DEBOUNCE_MS);
-      };
-
-      const handleEvent = (data) => {
-        if (data === '[DONE]') {
-          streamEnded = true;
-          flushStreaming();
-          return;
-        }
-        if (data.startsWith('[SESSION_ID:')) {
-          const sid = data.slice(13, -1);
-          set({ currentSessionId: sid });
-          get().fetchSessions();
-          return;
-        }
-        fullContent += data;
-        scheduleStreamingFlush();
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const { events, remainder } = parseSSEBuffer(buffer);
-        buffer = remainder;
-        for (const data of events) {
-          if (!data) continue;
-          handleEvent(data);
-          if (streamEnded) break;
-        }
-        if (streamEnded) break;
+      if (aborted) {
+        saveAssistantMessage(set, get, fullContent, true);
+        return;
       }
 
-      if (!streamEnded && buffer.trim()) {
-        const { events } = parseSSEBuffer(`${buffer}\n\n`);
-        for (const data of events) {
-          if (!data) continue;
-          handleEvent(data);
-          if (streamEnded) break;
-        }
-      }
-
-      flushStreaming();
-
-      const assistantMsg = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: fullContent,
-        timestamp: new Date().toISOString(),
-      };
-      set((s) => ({
-        messages: [...s.messages, assistantMsg],
-        streamingContent: '',
-        streaming: false,
-        abortController: null,
-      }));
-
-      get().fetchSessions();
+      saveAssistantMessage(set, get, fullContent);
       get().fetchDomains();
     } catch (e) {
-      if (e.name === 'AbortError') {
-        if (fullContent && fullContent.trim()) {
-          const assistantMsg = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: fullContent + '\n\n*(已停止生成)*',
-            timestamp: new Date().toISOString(),
-          };
-          set((s) => ({
-            messages: [...s.messages, assistantMsg],
-            streamingContent: '',
-            streaming: false,
-            abortController: null,
-          }));
-          get().fetchSessions();
-          return;
-        }
-      }
       console.error('Regenerate error', e);
       set({ streaming: false, abortController: null });
     }
@@ -661,6 +503,57 @@ const useStore = create((set, get) => ({
 
   clearDomainView: () => set({ selectedDomain: null, domainContent: '', entries: [] }),
   setSidebarTab: (tab) => set({ sidebarTab: tab, selectedDomain: null, domainContent: '' }),
+
+  // Actions - Knowledge Import/Export
+  exportKnowledgeBase: async () => {
+    try {
+      const res = await fetch('/api/knowledge/export');
+      if (!res.ok) throw new Error('导出失败');
+      const blob = await res.blob();
+      const date = new Date().toISOString().slice(0, 10);
+      // Trigger download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `knowledge-export-${date}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Failed to export knowledge base', e);
+      throw e;
+    }
+  },
+
+  importKnowledge: async (domain, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`/api/knowledge/import?domain=${encodeURIComponent(domain)}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || '导入失败');
+    }
+    return res.json();
+  },
+
+  smartImportKnowledge: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    // No domain param — backend auto-classifies based on content
+    const res = await fetch('/api/knowledge/smart-import', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || '智能导入失败');
+    }
+    return res.json();
+  },
 
   // Actions - Export
   exportSession: () => {

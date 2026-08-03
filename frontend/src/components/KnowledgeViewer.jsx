@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import useStore from '../store';
 import MarkdownViewer from './MarkdownViewer';
 
@@ -9,10 +9,17 @@ export default function KnowledgeViewer() {
   const updateEntry = useStore((s) => s.updateEntry);
   const deleteEntry = useStore((s) => s.deleteEntry);
   const entries = useStore((s) => s.entries);
+  const exportKnowledgeBase = useStore((s) => s.exportKnowledgeBase);
+  const importKnowledge = useStore((s) => s.importKnowledge);
+  const smartImportKnowledge = useStore((s) => s.smartImportKnowledge);
 
   const [editingId, setEditingId] = useState(null);
   const [editQuestion, setEditQuestion] = useState('');
   const [editAnswer, setEditAnswer] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [smartImporting, setSmartImporting] = useState(false);
+  const fileInputRef = useRef(null);
+  const smartFileInputRef = useRef(null);
 
   useEffect(() => {
     if (selectedDomain) {
@@ -43,12 +50,91 @@ export default function KnowledgeViewer() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      await exportKnowledgeBase();
+    } catch (e) {
+      alert('导出失败: ' + e.message);
+    }
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const result = await importKnowledge(selectedDomain, file);
+      alert(`导入完成，共 ${result.entries || 0} 条条目`);
+      fetchEntries(selectedDomain);
+    } catch (e) {
+      alert('导入失败: ' + e.message);
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSmartImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSmartImporting(true);
+    try {
+      const result = await smartImportKnowledge(file);
+      const domain = result.domain || '未知域';
+      alert(`智能导入完成！\n知识域：${domain}\nAI 提炼出 ${result.entries || 0} 条高质量条目`);
+      // Refresh domain list (in case a new domain was created)
+      useStore.getState().fetchDomains();
+      // Navigate to the classified domain to show the imported entries
+      useStore.getState().fetchDomainContent(domain);
+    } catch (e) {
+      alert('智能导入失败: ' + e.message);
+    } finally {
+      setSmartImporting(false);
+      e.target.value = '';
+    }
+  };
+
   if (!selectedDomain) return null;
 
   return (
     <div className="knowledge-viewer">
       <div className="knowledge-header">
         <h2>{selectedDomain}</h2>
+        <div className="knowledge-actions">
+          <button className="btn-export" onClick={handleExport}>
+            导出知识库
+          </button>
+          <button
+            className="btn-import"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing || smartImporting}
+            title="按标题直接拆分导入"
+          >
+            {importing ? '导入中…' : '快速导入'}
+          </button>
+          <input
+            type="file"
+            accept=".md"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleImport}
+          />
+          <button
+            className="btn-smart-import"
+            onClick={() => smartFileInputRef.current?.click()}
+            disabled={importing || smartImporting}
+            title="AI 智能提炼 Q&A，合并相关内容"
+          >
+            {smartImporting ? 'AI 处理中…' : '智能导入'}
+          </button>
+          <input
+            type="file"
+            accept=".md"
+            ref={smartFileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleSmartImport}
+          />
+        </div>
         <button className="btn-back" onClick={clearDomainView}>
           返回
         </button>

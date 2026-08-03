@@ -867,6 +867,56 @@ html, body, #root {
   background: var(--accent-dim);
 }
 
+.knowledge-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-import {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-import:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--msg-user);
+}
+
+.btn-import:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.btn-smart-import {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--primary-foreground);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-smart-import:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+.btn-smart-import:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* Entry list */
 .entry-list {
   max-width: 800px;

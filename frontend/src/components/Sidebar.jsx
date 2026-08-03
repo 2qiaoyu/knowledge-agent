@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import useStore from '../store';
 
 export default function Sidebar() {
@@ -11,15 +11,20 @@ export default function Sidebar() {
   const newChat = useStore((s) => s.newChat);
   const domains = useStore((s) => s.domains);
   const fetchDomainContent = useStore((s) => s.fetchDomainContent);
+  const fetchDomains = useStore((s) => s.fetchDomains);
   const deleteDomain = useStore((s) => s.deleteDomain);
   const searchKnowledge = useStore((s) => s.searchKnowledge);
   const clearSearch = useStore((s) => s.clearSearch);
   const searchQuery = useStore((s) => s.searchQuery);
   const searchResults = useStore((s) => s.searchResults);
   const reclassifyDomains = useStore((s) => s.reclassifyDomains);
+  const exportKnowledgeBase = useStore((s) => s.exportKnowledgeBase);
+  const smartImportKnowledge = useStore((s) => s.smartImportKnowledge);
 
   const [localSearch, setLocalSearch] = useState('');
   const [reclassifying, setReclassifying] = useState(false);
+  const [smartImporting, setSmartImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -44,6 +49,34 @@ export default function Sidebar() {
       alert('重新分类失败: ' + e.message);
     } finally {
       setReclassifying(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    try {
+      await exportKnowledgeBase();
+    } catch (e) {
+      alert('导出失败: ' + e.message);
+    }
+  };
+
+  const handleSmartImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSmartImporting(true);
+    try {
+      const result = await smartImportKnowledge(file);
+      const domain = result.domain || '未知域';
+      alert(`智能导入完成！\n知识域：${domain}\nAI 提炼出 ${result.entries || 0} 条高质量条目`);
+      // Refresh domain list (in case a new domain was created)
+      fetchDomains();
+      // Navigate to the classified domain
+      fetchDomainContent(domain);
+    } catch (e) {
+      alert('智能导入失败: ' + e.message);
+    } finally {
+      setSmartImporting(false);
+      e.target.value = '';
     }
   };
 
@@ -150,6 +183,30 @@ export default function Sidebar() {
           {/* Domain list (hidden during search) */}
           {!searchQuery && (
             <>
+              <div className="knowledge-actions">
+                <button
+                  className="btn-smart-import"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={smartImporting}
+                  title="AI 智能提炼 Q&A 并自动分类"
+                >
+                  {smartImporting ? 'AI 处理中…' : '智能导入'}
+                </button>
+                <button
+                  className="btn-export"
+                  onClick={handleExportAll}
+                  title="导出全部知识域为 zip"
+                >
+                  导出全部
+                </button>
+                <input
+                  type="file"
+                  accept=".md"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleSmartImport}
+                />
+              </div>
               <button
                 className="btn-reclassify"
                 onClick={handleReclassify}
