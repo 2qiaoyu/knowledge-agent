@@ -301,10 +301,81 @@ html, body, #root {
   gap: 2px;
   opacity: 0;
   transition: opacity 0.15s;
+  position: relative;
 }
 
 .message:hover .message-actions {
   opacity: 1;
+}
+
+.btn-msg-menu-trigger {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1.4;
+}
+
+.btn-msg-menu-trigger:hover {
+  color: var(--accent);
+  border-color: rgba(37, 99, 235, 0.3);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.message-action-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  overflow: hidden;
+  min-width: 120px;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.btn-action-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.btn-action-item:hover {
+  background: var(--bg-secondary);
+}
+
+.btn-action-danger {
+  color: var(--danger);
+}
+
+.btn-action-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .btn-edit-msg,

@@ -13,18 +13,38 @@ export default function ChatMessages({ messages }) {
 
   const [editingId, setEditingId] = useState(null);
   const [editContent, setEditContent] = useState('');
+  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
   const textareaRef = useRef(null);
 
   // 只在非流式、且最后一条是 assistant 消息时显示重新生成按钮
   const showRegenerate = !streaming && messages.length > 0 && messages[messages.length - 1].role === 'assistant';
 
   const handleDelete = (msg) => {
+    setActiveMenuId(null);
     if (window.confirm('确定删除这条消息？')) {
       deleteMessage(msg.id);
     }
   };
 
+  const handleCopy = async (msg) => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = msg.content;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedId(msg.id);
+    setTimeout(() => setCopiedId(null), 2000);
+    setActiveMenuId(null);
+  };
+
   const startEdit = (msg) => {
+    setActiveMenuId(null);
     setEditingId(msg.id);
     setEditContent(msg.content);
   };
@@ -69,6 +89,14 @@ export default function ChatMessages({ messages }) {
     }
   };
 
+  // 点击外部关闭菜单
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const handleClick = () => setActiveMenuId(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [activeMenuId]);
+
   return (
     <>
       {messages.map((msg) => (
@@ -78,19 +106,28 @@ export default function ChatMessages({ messages }) {
             {editingId !== msg.id && (
               <div className="message-actions">
                 <button
-                  className="btn-edit-msg"
-                  onClick={() => startEdit(msg)}
-                  title="编辑此消息"
+                  className="btn-msg-menu-trigger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveMenuId(activeMenuId === msg.id ? null : msg.id);
+                  }}
+                  title="更多操作"
                 >
-                  ✎
+                  ⋯
                 </button>
-                <button
-                  className="btn-delete-msg"
-                  onClick={() => handleDelete(msg)}
-                  title="删除此消息"
-                >
-                  ✕
-                </button>
+                {activeMenuId === msg.id && (
+                  <div className="message-action-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <button className="btn-action-item" onClick={() => handleCopy(msg)}>
+                      {copiedId === msg.id ? '✓ 已复制' : '📋 复制'}
+                    </button>
+                    <button className="btn-action-item" onClick={() => startEdit(msg)}>
+                      ✎ 编辑
+                    </button>
+                    <button className="btn-action-item btn-action-danger" onClick={() => handleDelete(msg)}>
+                      ✕ 删除
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
