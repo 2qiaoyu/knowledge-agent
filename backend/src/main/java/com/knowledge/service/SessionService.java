@@ -15,6 +15,10 @@ import java.nio.file.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class SessionService {
@@ -25,6 +29,9 @@ public class SessionService {
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
     private final Path storePath;
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> pendingSave;
+    private static final long SAVE_DEBOUNCE_MS = 500;
 
     @Autowired
     public SessionService(ObjectMapper objectMapper) {
@@ -56,15 +63,40 @@ public class SessionService {
         }
     }
 
-    private synchronized void saveToFile() {
+    /**
+     * Schedule a debounced save. Multiple rapid mutations coalesce into one write.
+     */
+    private void scheduleSave() {
+        synchronized (scheduler) {
+            if (pendingSave != null) {
+                pendingSave.cancel(false);
+            }
+            pendingSave = scheduler.schedule(this::saveToFile, SAVE_DEBOUNCE_MS, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void saveToFile() {
         try {
             List<Session> list = new ArrayList<>(sessions.values());
-            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(list);
+            String json = objectMapper.writeValueAsString(list);
             Files.writeString(storePath, json,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
             log.error("Failed to save sessions to file", e);
         }
+    }
+
+    /**
+     * Force immediate save (bypass debounce). For tests only.
+     */
+    void flushSave() {
+        synchronized (scheduler) {
+            if (pendingSave != null) {
+                pendingSave.cancel(false);
+                pendingSave = null;
+            }
+        }
+        saveToFile();
     }
 
     public Session createSession(String title) {
@@ -77,7 +109,7 @@ public class SessionService {
                 .updatedAt(Instant.now())
                 .build();
         sessions.put(id, session);
-        saveToFile();
+        scheduleSave();
         return session;
     }
 
@@ -100,6 +132,24 @@ public class SessionService {
     }
 
     /**
+     * List session summaries (no messages) for efficient sidebar loading.
+     */
+    public List<Session> listSessionSummaries() {
+        return sessions.values().stream()
+                .filter(s -> !s.isArchived())
+                .sorted(Comparator.comparing(Session::getUpdatedAt).reversed())
+                .map(s -> Session.builder()
+                        .id(s.getId())
+                        .title(s.getTitle())
+                        .createdAt(s.getCreatedAt())
+                        .updatedAt(s.getUpdatedAt())
+                        .archived(s.isArchived())
+                        .messages(List.of()) // empty to reduce payload
+                        .build())
+                .toList();
+    }
+
+    /**
      * List archived sessions, sorted by updatedAt descending.
      */
     public List<Session> listArchivedSessions() {
@@ -116,7 +166,7 @@ public class SessionService {
         Session session = getSession(id);
         session.setArchived(true);
         session.setUpdatedAt(Instant.now());
-        saveToFile();
+        scheduleSave();
         return session;
     }
 
@@ -127,7 +177,7 @@ public class SessionService {
         Session session = getSession(id);
         session.setArchived(false);
         session.setUpdatedAt(Instant.now());
-        saveToFile();
+        scheduleSave();
         return session;
     }
 
@@ -145,7 +195,7 @@ public class SessionService {
             }
         }
         if (count > 0) {
-            saveToFile();
+            scheduleSave();
             log.info("Auto-archived {} sessions older than {} days", count, days);
         }
         return count;
@@ -155,7 +205,7 @@ public class SessionService {
         Session session = getSession(sessionId);
         session.getMessages().add(message);
         session.setUpdatedAt(Instant.now());
-        saveToFile();
+        scheduleSave();
     }
 
     public List<ChatMessage> getHistory(String sessionId) {
@@ -164,7 +214,7 @@ public class SessionService {
 
     public void deleteSession(String id) {
         sessions.remove(id);
-        saveToFile();
+        scheduleSave();
     }
 
     public boolean deleteMessage(String sessionId, String messageId) {
@@ -172,7 +222,7 @@ public class SessionService {
         boolean removed = session.getMessages().removeIf(m -> messageId.equals(m.getId()));
         if (removed) {
             session.setUpdatedAt(Instant.now());
-            saveToFile();
+            scheduleSave();
         }
         return removed;
     }
@@ -183,7 +233,7 @@ public class SessionService {
             if (messageId.equals(msg.getId())) {
                 msg.setContent(newContent);
                 session.setUpdatedAt(Instant.now());
-                saveToFile();
+                scheduleSave();
                 return true;
             }
         }
@@ -207,7 +257,7 @@ public class SessionService {
         if (idx >= 0 && idx < messages.size() - 1) {
             messages.subList(idx + 1, messages.size()).clear();
             session.setUpdatedAt(Instant.now());
-            saveToFile();
+            scheduleSave();
         }
     }
 }

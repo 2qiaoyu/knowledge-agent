@@ -47,7 +47,10 @@ public class ChatController {
     }
 
     @GetMapping("/sessions")
-    public List<Session> listSessions() {
+    public List<Session> listSessions(@RequestParam(value = "summary", defaultValue = "false") boolean summary) {
+        if (summary) {
+            return sessionService.listSessionSummaries();
+        }
         return sessionService.listSessions();
     }
 

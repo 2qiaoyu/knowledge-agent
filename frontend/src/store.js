@@ -166,7 +166,8 @@ const useStore = create((set, get) => ({
 
   fetchSessions: async () => {
     try {
-      const res = await fetch('/api/sessions');
+      // Use summary endpoint to avoid loading full message history
+      const res = await fetch('/api/sessions?summary=true');
       const sessions = await res.json();
       set({ sessions });
     } catch (e) {

@@ -110,6 +110,9 @@ class SessionServiceTest {
         var session = sessionService.createSession("Persist Test");
         String id = session.getId();
 
+        // Force immediate save (bypass debounce for test)
+        sessionService.flushSave();
+
         // Create new service instance pointing to same file (simulates restart)
         ObjectMapper newMapper = new ObjectMapper();
         newMapper.registerModule(new JavaTimeModule());
