@@ -187,10 +187,15 @@ const useStore = create((set, get) => ({
   archiveSession: async (id) => {
     try {
       await fetch(`/api/sessions/${id}/archive`, { method: 'POST' });
-      set((s) => ({
-        sessions: s.sessions.filter((x) => x.id !== id),
-        archivedSessions: [{ id, archived: true }, ...(s.archivedSessions || [])],
-      }));
+      set((s) => {
+        const session = s.sessions.find((x) => x.id === id);
+        const archivedSession = session ? { ...session, archived: true } : { id, title: '未知对话', archived: true };
+        return {
+          sessions: s.sessions.filter((x) => x.id !== id),
+          archivedSessions: [archivedSession, ...(s.archivedSessions || [])],
+          currentSessionId: s.currentSessionId === id ? null : s.currentSessionId,
+        };
+      });
     } catch (e) {
       console.error('Failed to archive session', e);
     }
@@ -198,9 +203,12 @@ const useStore = create((set, get) => ({
 
   unarchiveSession: async (id) => {
     try {
-      await fetch(`/api/sessions/${id}/unarchive`, { method: 'POST' });
+      // Get full session data from backend
+      const res = await fetch(`/api/sessions/${id}`);
+      const session = await res.json();
       set((s) => ({
         archivedSessions: (s.archivedSessions || []).filter((x) => x.id !== id),
+        sessions: [session, ...s.sessions],
       }));
     } catch (e) {
       console.error('Failed to unarchive session', e);
