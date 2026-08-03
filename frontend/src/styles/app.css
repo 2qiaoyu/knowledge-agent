@@ -85,6 +85,12 @@ html, body, #root {
   border-bottom: 1px solid var(--border);
 }
 
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .sidebar-header h2 {
   font-size: 18px;
   color: var(--accent);
@@ -1242,21 +1248,19 @@ html, body, #root {
 
 /* Theme toggle */
 .btn-theme-toggle {
-  width: 100%;
-  padding: 8px;
-  margin-top: 12px;
-  font-size: 13px;
+  font-size: 18px;
   color: var(--text-secondary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: none;
+  border: none;
   cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
   transition: all 0.15s;
+  line-height: 1;
 }
 
 .btn-theme-toggle:hover {
   color: var(--accent);
-  border-color: var(--accent);
   background: var(--bg-tertiary);
 }
 

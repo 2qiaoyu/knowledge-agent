@@ -86,6 +86,9 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <h2>知识库</h2>
+        <button className="btn-theme-toggle" onClick={toggleDarkMode} title="切换主题">
+          {darkMode ? '☀' : '🌙'}
+        </button>
       </div>
 
       <div className="sidebar-tabs">
@@ -242,10 +245,6 @@ export default function Sidebar() {
             </>
           )}
 
-          {/* Theme toggle at bottom of sidebar */}
-          <button className="btn-theme-toggle" onClick={toggleDarkMode} title="切换主题">
-            {darkMode ? '☀ 浅色' : '🌙 深色'}
-          </button>
         </div>
       )}
     </aside>
