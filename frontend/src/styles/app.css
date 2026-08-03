@@ -507,6 +507,9 @@ html, body, #root {
 }
 
 .markdown-body .code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   background: #f1f5f9;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
@@ -518,6 +521,24 @@ html, body, #root {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.btn-copy-code {
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-copy-code:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.05);
 }
 
 .markdown-body pre {

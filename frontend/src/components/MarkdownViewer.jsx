@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -40,27 +40,9 @@ export default function MarkdownViewer({ content, streaming = false }) {
             }
 
             return (
-              <div className="code-block-wrapper">
-                {language && (
-                  <div className="code-block-header">
-                    <span className="code-block-lang">{language}</span>
-                  </div>
-                )}
-                <SyntaxHighlighter
-                  style={oneLight}
-                  language={language || 'text'}
-                  PreTag="div"
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: language ? '0 0 8px 8px' : '8px',
-                    fontSize: '14px',
-                    lineHeight: '1.6',
-                  }}
-                  {...props}
-                >
-                  {String(children).replace(/\n$/, '')}
-                </SyntaxHighlighter>
-              </div>
+              <CodeBlock language={language}>
+                {String(children).replace(/\n$/, '')}
+              </CodeBlock>
             );
           },
           table({ children }) {
@@ -70,6 +52,57 @@ export default function MarkdownViewer({ content, streaming = false }) {
       >
         {processedContent}
       </ReactMarkdown>
+    </div>
+  );
+}
+
+/**
+ * CodeBlock with copy button
+ */
+function CodeBlock({ children, language }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(children);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = children;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="code-block-wrapper">
+      {language && (
+        <div className="code-block-header">
+          <span className="code-block-lang">{language}</span>
+          <button className="btn-copy-code" onClick={handleCopy} title="复制代码">
+            {copied ? '✓ 已复制' : '复制'}
+          </button>
+        </div>
+      )}
+      <SyntaxHighlighter
+        style={oneLight}
+        language={language || 'text'}
+        PreTag="div"
+        customStyle={{
+          margin: 0,
+          borderRadius: language ? '0 0 8px 8px' : '8px',
+          fontSize: '14px',
+          lineHeight: '1.6',
+        }}
+      >
+        {children}
+      </SyntaxHighlighter>
     </div>
   );
 }
