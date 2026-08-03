@@ -48,7 +48,7 @@
 
 | # | 功能 | 状态 | 说明 |
 |---|------|------|------|
-| 18 | 键盘快捷键 | ⏳ 待开发 | Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成 |
+| 18 | 键盘快捷键 | ✅ 已完成 | Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成 |
 | 19 | 暗色模式 | ⏳ 待开发 | CSS Variables 已预留，添加 dark theme 切换 |
 | 20 | 代码块复制按钮 | ✅ 已完成 | 代码块头部右侧添加"复制"按钮，点击后变"✓ 已复制" |
 | 21 | 消息操作菜单 | ⏳ 待开发 | 复制消息内容、编辑、删除等操作 |
@@ -151,6 +151,7 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 | T5 | store.js SSE 逻辑重复 | 提取 `consumeStream()` + `saveAssistantMessage()` 共享函数；store.js 从 701 行减至 543 行（-22%） | `store.js` |
 | T2 | ChatMemory 纯内存且无界 | 设置 `MessageWindowChatMemory.maxMessages(20)`，保留最近 20 轮对话 | `ChatService.java` |
 | T4 | 前端流式错误静默 | 增加 `chatError` store 状态；错误 banner 提示 + 重试按钮；保留已输出部分内容 | `store.js`, `ChatMessages.jsx`, `app.css` |
+| 18 | 键盘快捷键 | Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成（输入框聚焦时不触发） | `App.jsx` |
 
 ### ⏳ 待修复
 
