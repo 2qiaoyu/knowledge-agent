@@ -10,6 +10,9 @@ export default function ChatMessages({ messages }) {
   const deleteMessage = useStore((s) => s.deleteMessage);
   const editMessage = useStore((s) => s.editMessage);
   const editAssistantMessage = useStore((s) => s.editAssistantMessage);
+  const recommendations = useStore((s) => s.recommendations);
+  const clearRecommendations = useStore((s) => s.clearRecommendations);
+  const fetchDomainContent = useStore((s) => s.fetchDomainContent);
 
   const [editingId, setEditingId] = useState(null);
   const [editContent, setEditContent] = useState('');
@@ -163,6 +166,27 @@ export default function ChatMessages({ messages }) {
           <button className="btn-regenerate" onClick={regenerate}>
             重新生成
           </button>
+        </div>
+      )}
+      {recommendations.length > 0 && !streaming && (
+        <div className="recommendations">
+          <div className="recommendations-header">
+            <span>📚 相关知识推荐</span>
+            <button className="btn-dismiss-error" onClick={clearRecommendations} title="关闭">✕</button>
+          </div>
+          {recommendations.map((r, i) => (
+            <div
+              key={i}
+              className="recommendation-card"
+              onClick={() => {
+                fetchDomainContent(r.domain);
+                clearRecommendations();
+              }}
+            >
+              <div className="recommendation-domain">{r.domain}</div>
+              <div className="recommendation-question">{r.question}</div>
+            </div>
+          ))}
         </div>
       )}
       {chatError && (

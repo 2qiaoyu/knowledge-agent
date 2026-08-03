@@ -140,12 +140,31 @@ const useStore = create((set, get) => ({
   sidebarTab: 'sessions', // 'sessions' | 'knowledge'
   darkMode: false,
 
+  // Knowledge recommendations
+  recommendations: [], // [{ domain, question, answer }]
+
   // Actions - Error handling
   clearChatError: () => set({ chatError: null }),
+
+  // Actions - Recommendations
+  setRecommendations: (recommendations) => set({ recommendations }),
+  clearRecommendations: () => set({ recommendations: [] }),
 
   // Actions - Theme
   toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
   setDarkMode: (dark) => set({ darkMode: dark }),
+
+  // Actions - Knowledge recommendations
+  fetchRecommendations: async (query) => {
+    try {
+      const res = await fetch(`/api/knowledge/recommend?q=${encodeURIComponent(query)}&limit=3`);
+      if (!res.ok) return;
+      const data = await res.json();
+      set({ recommendations: data });
+    } catch (e) {
+      console.error('Failed to fetch recommendations', e);
+    }
+  },
 
   // Actions - Sessions
   setSessions: (sessions) => set({ sessions }),
@@ -299,6 +318,8 @@ const useStore = create((set, get) => ({
 
       saveAssistantMessage(set, get, fullContent);
       get().fetchDomains();
+      // Fetch proactive knowledge recommendations based on the question
+      get().fetchRecommendations(content);
     } catch (e) {
       // Network failure (fetch itself failed)
       console.error('Chat error', e);

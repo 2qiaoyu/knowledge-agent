@@ -41,6 +41,17 @@ public class KnowledgeController {
         );
     }
 
+    /**
+     * Recommend related knowledge entries based on a query.
+     * Used for proactive knowledge recommendation after conversations.
+     */
+    @GetMapping("/recommend")
+    public Mono<List<KnowledgeService.SearchResult>> recommend(
+            @RequestParam("q") String query,
+            @RequestParam(value = "limit", defaultValue = "3") int limit) {
+        return knowledgeService.recommendEntries(query, limit);
+    }
+
     @GetMapping("/search")
     public Mono<List<KnowledgeService.SearchResult>> search(
             @RequestParam("q") String query,

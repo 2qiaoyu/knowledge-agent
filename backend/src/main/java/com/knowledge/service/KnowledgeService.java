@@ -423,6 +423,7 @@ public class KnowledgeService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 已有相关知识\n\n");
+        int relevantCount = 0;
         for (int i = 0; i < results.size(); i++) {
             Document doc = results.get(i);
             String question = (String) doc.getMetadata().getOrDefault("question", "");
@@ -435,11 +436,17 @@ public class KnowledgeService {
             } else {
                 answer = content;
             }
+            // Chroma returns results sorted by relevance; mark all as relevant since they passed threshold
+            relevantCount++;
             sb.append("---\n");
+            sb.append("**相关知识 ").append(relevantCount).append("**\n");
             sb.append("**问题**: ").append(question).append("\n\n");
             sb.append("**回答**: ").append(answer).append("\n");
         }
         sb.append("---\n\n");
+        if (relevantCount > 1) {
+            sb.append("提示：以上 ").append(relevantCount).append(" 条知识相关度较高，请综合融合后回答。\n\n");
+        }
         return sb.toString();
     }
 
@@ -476,6 +483,43 @@ public class KnowledgeService {
     }
 
     public record SearchResult(String domain, String question, String answer) {}
+
+    /**
+     * Recommend related knowledge entries for proactive suggestion.
+     * Uses a slightly higher topK and filters for quality.
+     */
+    public Mono<List<SearchResult>> recommendEntries(String query, int limit) {
+        return Mono.fromCallable(() -> vectorStore.similaritySearch(
+                SearchRequest.builder().query(query).topK(limit + 2).build()))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .map(results -> {
+                    if (results.isEmpty()) return List.<SearchResult>of();
+                    return results.stream()
+                            .filter(doc -> {
+                                // Filter out low-quality results
+                                String content = doc.getText();
+                                return content != null && content.length() > 20;
+                            })
+                            .limit(limit)
+                            .map(doc -> {
+                                String domain = (String) doc.getMetadata().getOrDefault("domain", "未知");
+                                String question = (String) doc.getMetadata().getOrDefault("question", "");
+                                String content = doc.getText();
+                                String answer = "";
+                                int aIdx = content.indexOf("\nA: ");
+                                if (aIdx >= 0) {
+                                    answer = content.substring(aIdx + 4);
+                                } else if (content.startsWith("Q: ")) {
+                                    answer = content;
+                                }
+                                if (answer.length() > 150) {
+                                    answer = answer.substring(0, 150) + "...";
+                                }
+                                return new SearchResult(domain, question, answer);
+                            })
+                            .collect(Collectors.toList());
+                });
+    }
 
     /**
      * Represents a Q&A pair extracted by LLM during smart import.
