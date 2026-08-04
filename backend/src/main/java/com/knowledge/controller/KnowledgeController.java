@@ -5,6 +5,7 @@ import com.knowledge.service.EntryOptimizationService;
 import com.knowledge.service.KnowledgeGraphService;
 import com.knowledge.service.KnowledgeMaintenanceService;
 import com.knowledge.service.KnowledgeService;
+import com.knowledge.service.WebPageImportService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,14 +32,17 @@ public class KnowledgeController {
     private final KnowledgeGraphService graphService;
     private final KnowledgeMaintenanceService maintenanceService;
     private final EntryOptimizationService optimizationService;
+    private final WebPageImportService webPageImportService;
 
     public KnowledgeController(KnowledgeService knowledgeService, KnowledgeGraphService graphService,
                                KnowledgeMaintenanceService maintenanceService,
-                               EntryOptimizationService optimizationService) {
+                               EntryOptimizationService optimizationService,
+                               WebPageImportService webPageImportService) {
         this.knowledgeService = knowledgeService;
         this.graphService = graphService;
         this.maintenanceService = maintenanceService;
         this.optimizationService = optimizationService;
+        this.webPageImportService = webPageImportService;
     }
 
     @GetMapping("/domains")
@@ -319,6 +323,52 @@ public class KnowledgeController {
         );
     }
 
+    /**
+     * 步骤 1：抓取网页并提取正文（不保存，仅预览）。
+     */
+    @PostMapping("/import-url/fetch")
+    public Mono<WebPageImportService.WebPageContent> fetchUrl(@RequestBody Map<String, String> body) {
+        String url = body.get("url");
+        if (url == null || url.isBlank()) {
+            return Mono.error(new IllegalArgumentException("URL 不能为空"));
+        }
+        return Mono.fromCallable(() -> webPageImportService.fetchAndExtract(url))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 步骤 2：LLM 提炼 Q&A，自动分类知识域，保存到知识库。
+     */
+    @PostMapping("/import-url/import")
+    public Mono<Map<String, Object>> importFromUrl(@RequestBody ImportUrlRequest body) {
+        return Mono.fromCallable(() -> {
+            // 1. LLM 提炼 Q&A
+            List<KnowledgeService.QAPair> pairs = webPageImportService.extractQAPairs(
+                    body.title(), body.text(), body.provider(), null);
+
+            // 2. 自动分类知识域
+            String domain = knowledgeService.classifyDomainForContent(body.text());
+
+            // 3. 为每条 Q&A 附加来源 URL
+            com.knowledge.model.ChatMessage.Citation sourceCitation =
+                    com.knowledge.model.ChatMessage.Citation.builder()
+                            .title(body.title())
+                            .url(body.url())
+                            .build();
+
+            // 4. 写入文件 + 索引
+            int count = knowledgeService.importQAPairs(domain, pairs, sourceCitation);
+
+            return Map.<String, Object>of(
+                    "domain", domain,
+                    "entries", count,
+                    "qaPairs", pairs.stream()
+                            .map(p -> Map.of("question", p.question(), "answer", p.answer()))
+                            .toList()
+            );
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
     /** 拆分请求体 */
     public record SplitRequest(String domain, List<KnowledgeMaintenanceService.SplitGroup> groups) {
         public KnowledgeMaintenanceService.SplitPlan toPlan() {
@@ -331,4 +381,7 @@ public class KnowledgeController {
 
     /** 优化请求体 */
     public record OptimizeRequest(String question, String answer, String provider, boolean enableWebSearch) {}
+
+    /** 网页导入请求体 */
+    public record ImportUrlRequest(String url, String title, String text, String provider) {}
 }

@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { fixIncompleteMarkdown } from '../utils/streamingMarkdown';
+import { fixIncompleteMarkdown, normalizeHeadingSpace } from '../utils/streamingMarkdown';
 
 /**
  * MarkdownViewer - 支持流式渲染的 Markdown 组件
@@ -19,8 +19,9 @@ export default function MarkdownViewer({ content, streaming = false }) {
     return null;
   }
 
-  // 流式输出时修复未闭合的 Markdown 标记
-  const processedContent = streaming ? fixIncompleteMarkdown(content) : content;
+  // 流式输出时修复未闭合的 Markdown 标记；始终规范化标题空格（修复 ##标题 → ## 标题）
+  let processedContent = streaming ? fixIncompleteMarkdown(content) : content;
+  processedContent = normalizeHeadingSpace(processedContent);
 
   return (
     <div className="markdown-body">

@@ -12,6 +12,7 @@
  * 2. 未闭合的粗体/斜体（**、*、__、_）
  * 3. 未闭合的链接/图片 [text](url 或 ![alt](url
  * 4. 未闭合的行内代码（`）
+ * 5. 未完成的标题（行尾只有 ## 没有文字时补空格，避免显示为普通文本）
  *
  * @param {string} text - 原始 Markdown 文本
  * @returns {string} - 修复后的文本
@@ -41,6 +42,9 @@ export function fixIncompleteMarkdown(text) {
 
   // 7. 修复未闭合的链接和图片
   result = fixUnclosedLinks(result);
+
+  // 8. 修复未完成的标题（行尾只有 # 标记没有文字）
+  result = fixIncompleteHeading(result);
 
   return result;
 }
@@ -175,6 +179,32 @@ function fixUnclosedLinks(text) {
   // 否则是引用式链接或普通文本，不做处理
 
   return result;
+}
+
+/**
+ * 修复流式输出中未完成的标题标记。
+ *
+ * 当 LLM 流式输出 "## 标题" 时，token 逐个到达，中间状态可能是：
+ *   "##\n" 或 "## \n"（只有 # 标记，标题文字尚未到达）
+ *
+ * react-markdown 遇到行尾只有 "##" 没有后续文字时，会将 # 显示为普通文本。
+ * 修复策略：如果一行只有 1-6 个 # 加可选空白（没有实际标题文字），
+ * 补一个空格将其变为空标题（不渲染为可见内容），等后续文字到达后自然形成正确标题。
+ */
+function fixIncompleteHeading(text) {
+  // 匹配行首 1-6 个 #，后跟可选空白，直到行尾（没有实际内容）
+  return text.replace(/^(#{1,6})\s*$/gm, '$1 ');
+}
+
+/**
+ * 规范化标题格式：确保 # 后面紧跟文字时有空格。
+ *
+ * 部分 LLM 会生成 "##标题"（# 后无空格），react-markdown 按 CommonMark 规范
+ * 不将其识别为标题，直接显示 # 符号。此函数将 "##标题" 修正为 "## 标题"。
+ */
+export function normalizeHeadingSpace(text) {
+  // 匹配行首 1-6 个 #，后紧跟一个非空格、非 # 的字符 → 插入空格
+  return text.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
 }
 
 /**

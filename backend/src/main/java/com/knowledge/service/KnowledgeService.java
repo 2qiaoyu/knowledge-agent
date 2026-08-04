@@ -1068,7 +1068,7 @@ public class KnowledgeService {
      * Classify content into an existing domain or suggest a new one.
      * Uses the first ~1000 chars as a summary for classification.
      */
-    private String classifyDomainForContent(String content) {
+    public String classifyDomainForContent(String content) {
         // Extract title (first H1 or first line) and a content summary
         String title = "";
         String summary = content.length() > 1000 ? content.substring(0, 1000) : content;
@@ -1126,7 +1126,7 @@ public class KnowledgeService {
      * Handles JSON arrays, with or without markdown code fences.
      */
     @SuppressWarnings("unchecked")
-    private List<QAPair> parseQAPairs(String llmResponse) {
+    static List<QAPair> parseQAPairsStatic(String llmResponse) {
         if (llmResponse == null || llmResponse.isBlank()) return List.of();
 
         try {
@@ -1161,15 +1161,36 @@ public class KnowledgeService {
     }
 
     /**
+     * Parse LLM response into Q&A pairs (instance delegate).
+     */
+    @SuppressWarnings("unchecked")
+    public List<QAPair> parseQAPairs(String llmResponse) {
+        return parseQAPairsStatic(llmResponse);
+    }
+
+    /**
      * Import Q&A pairs extracted by smartImport into the domain.
      * Each pair is appended as a new knowledge entry.
      *
      * @return the number of entries imported
      */
     public int importQAPairs(String domain, List<QAPair> pairs) {
+        return importQAPairs(domain, pairs, null);
+    }
+
+    /**
+     * Import Q&A pairs with a source citation attached to each entry.
+     *
+     * @param domain     target knowledge domain
+     * @param pairs      Q&A pairs to import
+     * @param sourceCitation source citation (e.g. the original webpage), null for none
+     * @return the number of entries imported
+     */
+    public int importQAPairs(String domain, List<QAPair> pairs, Citation sourceCitation) {
         int count = 0;
         for (QAPair pair : pairs) {
-            appendEntry(domain, pair.question(), pair.answer(), null);
+            List<Citation> citations = sourceCitation != null ? List.of(sourceCitation) : null;
+            appendEntry(domain, pair.question(), pair.answer(), citations);
             count++;
         }
         log.info("Imported {} Q&A pairs into domain '{}'", count, domain);

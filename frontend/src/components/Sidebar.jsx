@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import useStore from '../store';
+import UrlImportModal from './UrlImportModal';
 
 export default function Sidebar() {
   const sidebarTab = useStore((s) => s.sidebarTab);
@@ -31,6 +32,7 @@ export default function Sidebar() {
   const [localSearch, setLocalSearch] = useState('');
   const [reclassifying, setReclassifying] = useState(false);
   const [smartImporting, setSmartImporting] = useState(false);
+  const [showUrlImport, setShowUrlImport] = useState(false);
   const fileInputRef = useRef(null);
 
   // Load archived sessions when switching to sessions tab
@@ -249,6 +251,13 @@ export default function Sidebar() {
             <>
               <div className="knowledge-actions">
                 <button
+                  className="btn-url-import"
+                  onClick={() => setShowUrlImport(true)}
+                  title="从网页 URL 导入知识（如微信公众号文章）"
+                >
+                  🔗 网页导入
+                </button>
+                <button
                   className="btn-smart-import"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={smartImporting}
@@ -312,6 +321,17 @@ export default function Sidebar() {
           )}
 
         </div>
+      )}
+
+      {showUrlImport && (
+        <UrlImportModal
+          onClose={() => setShowUrlImport(false)}
+          onImportSuccess={(domain) => {
+            setShowUrlImport(false);
+            fetchDomains();
+            fetchDomainContent(domain);
+          }}
+        />
       )}
     </aside>
   );

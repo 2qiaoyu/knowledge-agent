@@ -41,7 +41,13 @@ export default function KnowledgeViewer() {
   const handleEdit = (entry) => {
     setEditingId(entry.id);
     setEditQuestion(entry.question);
-    setEditAnswer(entry.answer);
+    // 将引用来源拼接到 answer 尾部，保存时一并写回文件
+    // 格式必须匹配后端 REFERENCES_PATTERN: ^---\n参考来源[：:](.*)$
+    let fullAnswer = entry.answer;
+    if (entry.sources && entry.sources.trim()) {
+      fullAnswer = entry.answer.trimEnd() + "\n\n---\n参考来源：\n" + entry.sources.trim();
+    }
+    setEditAnswer(fullAnswer);
   };
 
   const handleSave = async (entryId) => {
@@ -282,6 +288,7 @@ export default function KnowledgeViewer() {
           }}
         />
       )}
+
     </div>
   );
 }

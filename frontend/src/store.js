@@ -784,6 +784,33 @@ const useStore = create((set, get) => ({
     return res.json();
   },
 
+  // Actions - URL Import
+  fetchUrlContent: async (url) => {
+    const res = await fetch('/api/knowledge/import-url/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || '抓取失败');
+    }
+    return res.json();
+  },
+
+  importFromUrl: async (url, title, text, provider) => {
+    const res = await fetch('/api/knowledge/import-url/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, title, text, provider }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || '导入失败');
+    }
+    return res.json();
+  },
+
   // Actions - Export
   exportSession: () => {
     const { messages, currentSessionId, sessions } = get();
