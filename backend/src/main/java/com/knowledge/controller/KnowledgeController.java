@@ -2,6 +2,7 @@ package com.knowledge.controller;
 
 import com.knowledge.model.GraphData;
 import com.knowledge.service.KnowledgeGraphService;
+import com.knowledge.service.KnowledgeMaintenanceService;
 import com.knowledge.service.KnowledgeService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
@@ -26,10 +27,13 @@ public class KnowledgeController {
 
     private final KnowledgeService knowledgeService;
     private final KnowledgeGraphService graphService;
+    private final KnowledgeMaintenanceService maintenanceService;
 
-    public KnowledgeController(KnowledgeService knowledgeService, KnowledgeGraphService graphService) {
+    public KnowledgeController(KnowledgeService knowledgeService, KnowledgeGraphService graphService,
+                               KnowledgeMaintenanceService maintenanceService) {
         this.knowledgeService = knowledgeService;
         this.graphService = graphService;
+        this.maintenanceService = maintenanceService;
     }
 
     @GetMapping("/domains")
@@ -251,5 +255,39 @@ public class KnowledgeController {
     public Mono<GraphData> rebuildGraph() {
         return Mono.fromCallable(graphService::rebuildGraph)
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 获取域拆分建议（LLM 分析，不执行）。
+     */
+    @PostMapping("/domains/{domain}/suggest-split")
+    public Mono<KnowledgeMaintenanceService.SplitSuggestion> suggestSplit(@PathVariable String domain) {
+        return Mono.fromCallable(() -> maintenanceService.suggestSplit(domain))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 获取域内重复条目建议。
+     */
+    @PostMapping("/domains/{domain}/suggest-merge")
+    public Mono<KnowledgeMaintenanceService.MergeSuggestion> suggestMerge(@PathVariable String domain) {
+        return Mono.fromCallable(() -> maintenanceService.suggestMerge(domain))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 执行域拆分（用户确认后调用）。
+     */
+    @PostMapping("/domains/execute-split")
+    public Mono<KnowledgeMaintenanceService.SplitResult> executeSplit(@RequestBody SplitRequest body) {
+        return Mono.fromCallable(() -> maintenanceService.executeSplit(body.domain(), body.toPlan()))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /** 拆分请求体 */
+    public record SplitRequest(String domain, List<KnowledgeMaintenanceService.SplitGroup> groups) {
+        public KnowledgeMaintenanceService.SplitPlan toPlan() {
+            return new KnowledgeMaintenanceService.SplitPlan(groups);
+        }
     }
 }

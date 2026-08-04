@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import useStore from '../store';
 import MarkdownViewer from './MarkdownViewer';
+import DomainOrganizer from './DomainOrganizer';
 
 export default function KnowledgeViewer() {
   const selectedDomain = useStore((s) => s.selectedDomain);
@@ -18,6 +19,7 @@ export default function KnowledgeViewer() {
   const [editAnswer, setEditAnswer] = useState('');
   const [importing, setImporting] = useState(false);
   const [smartImporting, setSmartImporting] = useState(false);
+  const [showOrganizer, setShowOrganizer] = useState(false);
   const fileInputRef = useRef(null);
   const smartFileInputRef = useRef(null);
 
@@ -134,6 +136,13 @@ export default function KnowledgeViewer() {
             style={{ display: 'none' }}
             onChange={handleSmartImport}
           />
+          <button
+            className="btn-organize"
+            onClick={() => setShowOrganizer(true)}
+            title="AI 分析域拆分 / 去重建议"
+          >
+            ⚙ 整理
+          </button>
         </div>
         <button className="btn-back" onClick={clearDomainView}>
           返回
@@ -197,6 +206,19 @@ export default function KnowledgeViewer() {
             </div>
           ))}
         </div>
+      )}
+
+      {showOrganizer && (
+        <DomainOrganizer
+          domain={selectedDomain}
+          onClose={(success) => {
+            setShowOrganizer(false);
+            if (success) {
+              // 拆分成功，刷新条目列表
+              clearDomainView();
+            }
+          }}
+        />
       )}
     </div>
   );

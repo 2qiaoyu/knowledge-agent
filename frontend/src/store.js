@@ -681,6 +681,36 @@ const useStore = create((set, get) => ({
 
   setShowGraph: (v) => set({ showGraph: v }),
 
+  // Actions - Domain Maintenance (拆分/去重)
+  suggestSplit: async (domain) => {
+    const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/suggest-split`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('获取拆分建议失败');
+    return res.json();
+  },
+
+  suggestMerge: async (domain) => {
+    const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/suggest-merge`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('获取去重建议失败');
+    return res.json();
+  },
+
+  executeSplit: async (domain, groups) => {
+    const res = await fetch('/api/knowledge/domains/execute-split', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain, groups }),
+    });
+    if (!res.ok) throw new Error('执行拆分失败');
+    const result = await res.json();
+    // 刷新域列表
+    get().fetchDomains();
+    return result;
+  },
+
   // Actions - Knowledge Import/Export
   exportKnowledgeBase: async () => {
     try {
