@@ -47,17 +47,32 @@ export default function EntryOptimizer({ entry, onClose, onReplace }) {
 
       while (true) {
         const { value, done: streamDone } = await reader.read();
-        if (streamDone) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
+
+        // 处理所有完整的 SSE 事件（以 \n\n 分隔）
         const lines = buffer.split('\n\n');
+        // 最后一个元素可能是不完整的，保留到下次处理
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const text = line.slice(6);
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const text = trimmed.slice(6);
             setOutput((prev) => prev + text);
           }
+        }
+
+        if (streamDone) {
+          // 流结束，处理 buffer 中剩余的数据
+          const remaining = buffer.trim();
+          if (remaining.startsWith('data: ')) {
+            const text = remaining.slice(6);
+            setOutput((prev) => prev + text);
+          }
+          break;
         }
       }
       setDone(true);
