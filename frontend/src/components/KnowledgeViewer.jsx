@@ -30,6 +30,9 @@ export default function KnowledgeViewer() {
   useEffect(() => {
     if (selectedDomain) {
       fetchEntries(selectedDomain);
+      // 切换知识域时滚动到顶部
+      const el = document.querySelector('.knowledge-viewer');
+      if (el) el.scrollTop = 0;
     }
   }, [selectedDomain, fetchEntries]);
 
