@@ -45,6 +45,32 @@ export default function EntryOptimizer({ entry, onClose, onReplace }) {
       const decoder = new TextDecoder();
       let buffer = '';
 
+      // 健壮的 SSE 解析：处理一行中多个 data: 前缀的情况
+      const parseSSEChunk = (chunk) => {
+        // SSE 格式: data: <content>\n\n
+        // 但 LongCat 可能返回嵌套的 data: data: <content>
+        // 需要提取所有 data: 行并拼接内容
+        const events = chunk.split('\n\n');
+        let content = '';
+        for (const event of events) {
+          // 处理事件中的每一行
+          const lines = event.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            // 移除所有层级的 "data: " 前缀
+            if (trimmed.startsWith('data:')) {
+              let text = trimmed.slice(5).trimStart();
+              // 处理嵌套的 data: data: 情况
+              while (text.startsWith('data:')) {
+                text = text.slice(5).trimStart();
+              }
+              content += text;
+            }
+          }
+        }
+        return content;
+      };
+
       while (true) {
         const { value, done: streamDone } = await reader.read();
 
@@ -53,24 +79,24 @@ export default function EntryOptimizer({ entry, onClose, onReplace }) {
         }
 
         // 处理所有完整的 SSE 事件（以 \n\n 分隔）
-        const lines = buffer.split('\n\n');
+        const events = buffer.split('\n\n');
         // 最后一个元素可能是不完整的，保留到下次处理
-        buffer = lines.pop() || '';
+        buffer = events.pop() || '';
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            const text = trimmed.slice(6);
+        for (const event of events) {
+          const text = parseSSEChunk(event);
+          if (text) {
             setOutput((prev) => prev + text);
           }
         }
 
         if (streamDone) {
           // 流结束，处理 buffer 中剩余的数据
-          const remaining = buffer.trim();
-          if (remaining.startsWith('data: ')) {
-            const text = remaining.slice(6);
-            setOutput((prev) => prev + text);
+          if (buffer.trim()) {
+            const text = parseSSEChunk(buffer);
+            if (text) {
+              setOutput((prev) => prev + text);
+            }
           }
           break;
         }
