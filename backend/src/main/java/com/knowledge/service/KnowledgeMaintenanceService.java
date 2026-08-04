@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -232,11 +235,14 @@ public class KnowledgeMaintenanceService {
         List<KnowledgeService.EntryRef> entries = knowledgeService.listEntries(domain);
         List<String> createdDomains = new ArrayList<>();
         int totalMoved = 0;
+        Set<Integer> migratedIndices = new HashSet<>();
 
         for (SplitGroup group : plan.groups()) {
             String targetDomain = group.suggestedName();
-            List<Integer> indices = group.entryIndices();
+            // 跳过与原域同名的组（表示保留在原域）
+            if (targetDomain.equals(domain)) continue;
 
+            List<Integer> indices = group.entryIndices();
             if (indices.isEmpty()) continue;
 
             // 迁移条目到新域（保留 sources）
@@ -245,6 +251,7 @@ public class KnowledgeMaintenanceService {
                 KnowledgeService.EntryRef entry = entries.get(idx);
                 knowledgeService.appendEntry(targetDomain, entry.question(), entry.answer(),
                         parseSources(entry.sources()));
+                migratedIndices.add(idx);
                 totalMoved++;
             }
 
@@ -252,21 +259,58 @@ public class KnowledgeMaintenanceService {
             log.info("拆分: 迁移 {} 条条目从 '{}' 到 '{}'", indices.size(), domain, targetDomain);
         }
 
+        // 从原域删除已迁移的条目
+        if (!migratedIndices.isEmpty()) {
+            removeMigratedEntries(domain, entries, migratedIndices);
+        }
+
         // 重新索引所有受影响的新域
         for (String newDomain : createdDomains) {
             knowledgeService.reindexDomain(newDomain);
         }
 
-        // 重新索引原域（条目已删除）
-        knowledgeService.reindexDomain(domain);
-
         // 如果原域已空，删除它
         if (knowledgeService.listEntries(domain).isEmpty()) {
             knowledgeService.deleteDomain(domain);
             log.info("拆分完成: 原域 '{}' 已空，已删除", domain);
+        } else {
+            // 重建原域向量索引
+            knowledgeService.reindexDomain(domain);
         }
 
         return new SplitResult(createdDomains, totalMoved);
+    }
+
+    /**
+     * 从原域 markdown 文件中删除已迁移的条目。
+     */
+    private void removeMigratedEntries(String domain, List<KnowledgeService.EntryRef> entries, Set<Integer> migratedIndices) {
+        String content = knowledgeService.getKnowledgeContent(domain);
+        if (content.isEmpty()) return;
+
+        // 保留未迁移的条目，重新组装文件
+        StringBuilder sb = new StringBuilder();
+        sb.append("# 知识域: ").append(domain).append("\n\n");
+
+        boolean first = true;
+        for (int i = 0; i < entries.size(); i++) {
+            if (migratedIndices.contains(i)) continue;
+            KnowledgeService.EntryRef entry = entries.get(i);
+            if (!first) sb.append("\n");
+            // 使用原始文件中的精确文本（保留完整格式）
+            String entryText = content.substring(entry.start(), entry.end());
+            sb.append(entryText);
+            // 确保条目以分隔符结尾
+            if (!entryText.endsWith("\n---\n") && !entryText.endsWith("---\n") && !entryText.endsWith("---")) {
+                sb.append("\n---\n");
+            } else if (entryText.endsWith("---")) {
+                sb.append("\n");
+            }
+            first = false;
+        }
+
+        knowledgeService.rewriteDomainFile(domain, sb.toString());
+        log.info("从 '{}' 删除了 {} 条已迁移条目", domain, migratedIndices.size());
     }
 
     // ---- 内部方法 ----

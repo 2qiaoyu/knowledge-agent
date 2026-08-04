@@ -733,6 +733,18 @@ public class KnowledgeService {
         }
     }
 
+    /**
+     * 重写域文件内容（供拆分/合并等维护操作使用）。
+     */
+    public void rewriteDomainFile(String domain, String content) {
+        try {
+            Path file = domainFile(domain);
+            Files.writeString(file, content, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
+        } catch (IOException e) {
+            log.error("Failed to rewrite domain file '{}': {}", domain, e.getMessage());
+        }
+    }
+
     private void reindexEntry(String domain, String oldQuestion, String newQuestion, String newAnswer) {
         // Remove old vector entry by metadata filter, then add the updated one
         removeFromIndex(domain, oldQuestion);
