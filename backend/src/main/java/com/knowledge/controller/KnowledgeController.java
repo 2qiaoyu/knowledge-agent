@@ -1,6 +1,7 @@
 package com.knowledge.controller;
 
 import com.knowledge.model.GraphData;
+import com.knowledge.service.EntryOptimizationService;
 import com.knowledge.service.KnowledgeGraphService;
 import com.knowledge.service.KnowledgeMaintenanceService;
 import com.knowledge.service.KnowledgeService;
@@ -10,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -28,12 +30,15 @@ public class KnowledgeController {
     private final KnowledgeService knowledgeService;
     private final KnowledgeGraphService graphService;
     private final KnowledgeMaintenanceService maintenanceService;
+    private final EntryOptimizationService optimizationService;
 
     public KnowledgeController(KnowledgeService knowledgeService, KnowledgeGraphService graphService,
-                               KnowledgeMaintenanceService maintenanceService) {
+                               KnowledgeMaintenanceService maintenanceService,
+                               EntryOptimizationService optimizationService) {
         this.knowledgeService = knowledgeService;
         this.graphService = graphService;
         this.maintenanceService = maintenanceService;
+        this.optimizationService = optimizationService;
     }
 
     @GetMapping("/domains")
@@ -297,6 +302,19 @@ public class KnowledgeController {
         }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
+    /**
+     * 优化知识条目（SSE 流式）。
+     */
+    @PostMapping(value = "/optimize-entry", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> optimizeEntry(@RequestBody OptimizeRequest body) {
+        return optimizationService.optimizeEntry(
+                body.question(),
+                body.answer(),
+                body.provider(),
+                body.enableWebSearch()
+        );
+    }
+
     /** 拆分请求体 */
     public record SplitRequest(String domain, List<KnowledgeMaintenanceService.SplitGroup> groups) {
         public KnowledgeMaintenanceService.SplitPlan toPlan() {
@@ -306,4 +324,7 @@ public class KnowledgeController {
 
     /** 重命名请求体 */
     public record RenameRequest(String newName) {}
+
+    /** 优化请求体 */
+    public record OptimizeRequest(String question, String answer, String provider, boolean enableWebSearch) {}
 }

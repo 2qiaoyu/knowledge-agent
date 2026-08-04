@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import useStore from '../store';
 import MarkdownViewer from './MarkdownViewer';
 import DomainOrganizer from './DomainOrganizer';
+import EntryOptimizer from './EntryOptimizer';
 
 export default function KnowledgeViewer() {
   const selectedDomain = useStore((s) => s.selectedDomain);
@@ -21,6 +22,7 @@ export default function KnowledgeViewer() {
   const [importing, setImporting] = useState(false);
   const [smartImporting, setSmartImporting] = useState(false);
   const [showOrganizer, setShowOrganizer] = useState(false);
+  const [optimizingEntry, setOptimizingEntry] = useState(null);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef(null);
@@ -239,6 +241,9 @@ export default function KnowledgeViewer() {
                     <MarkdownViewer content={entry.answer} />
                   </div>
                   <div className="entry-actions">
+                    <button className="btn-optimize" onClick={() => setOptimizingEntry(entry)}>
+                      ✨ 优化
+                    </button>
                     <button className="btn-edit" onClick={() => handleEdit(entry)}>
                       编辑
                     </button>
@@ -262,6 +267,17 @@ export default function KnowledgeViewer() {
               // 拆分成功，刷新条目列表
               clearDomainView();
             }
+          }}
+        />
+      )}
+
+      {optimizingEntry && (
+        <EntryOptimizer
+          entry={optimizingEntry}
+          onClose={() => setOptimizingEntry(null)}
+          onReplace={(newAnswer) => {
+            updateEntry(selectedDomain, optimizingEntry.id, optimizingEntry.question, newAnswer);
+            setOptimizingEntry(null);
           }}
         />
       )}
