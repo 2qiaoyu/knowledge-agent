@@ -275,8 +275,9 @@ export default function KnowledgeViewer() {
         <EntryOptimizer
           entry={optimizingEntry}
           onClose={() => setOptimizingEntry(null)}
-          onReplace={(newAnswer) => {
-            updateEntry(selectedDomain, optimizingEntry.id, optimizingEntry.question, newAnswer);
+          onReplace={async (newAnswer) => {
+            await updateEntry(selectedDomain, optimizingEntry.id, optimizingEntry.question, newAnswer);
+            await fetchEntries(selectedDomain);
             setOptimizingEntry(null);
           }}
         />
