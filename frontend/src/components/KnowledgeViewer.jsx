@@ -13,6 +13,7 @@ export default function KnowledgeViewer() {
   const exportKnowledgeBase = useStore((s) => s.exportKnowledgeBase);
   const importKnowledge = useStore((s) => s.importKnowledge);
   const smartImportKnowledge = useStore((s) => s.smartImportKnowledge);
+  const renameDomain = useStore((s) => s.renameDomain);
 
   const [editingId, setEditingId] = useState(null);
   const [editQuestion, setEditQuestion] = useState('');
@@ -20,6 +21,9 @@ export default function KnowledgeViewer() {
   const [importing, setImporting] = useState(false);
   const [smartImporting, setSmartImporting] = useState(false);
   const [showOrganizer, setShowOrganizer] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const smartFileInputRef = useRef(null);
 
@@ -96,12 +100,50 @@ export default function KnowledgeViewer() {
     }
   };
 
+  const handleStartRename = () => {
+    setRenaming(true);
+    setRenameValue(selectedDomain);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  const handleRename = async () => {
+    const newName = renameValue.trim();
+    if (!newName || newName === selectedDomain) {
+      setRenaming(false);
+      return;
+    }
+    try {
+      await renameDomain(selectedDomain, newName);
+      setRenaming(false);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleRenameKeyDown = (e) => {
+    if (e.key === 'Enter') handleRename();
+    if (e.key === 'Escape') setRenaming(false);
+  };
+
   if (!selectedDomain) return null;
 
   return (
     <div className="knowledge-viewer">
       <div className="knowledge-header">
-        <h2>{selectedDomain}</h2>
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            className="domain-rename-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={handleRename}
+            onKeyDown={handleRenameKeyDown}
+          />
+        ) : (
+          <h2 className="domain-title" onClick={handleStartRename} title="点击重命名">
+            {selectedDomain}
+          </h2>
+        )}
         <div className="knowledge-actions">
           <button className="btn-export" onClick={handleExport}>
             导出知识库

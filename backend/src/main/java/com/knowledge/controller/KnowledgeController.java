@@ -284,10 +284,26 @@ public class KnowledgeController {
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
+    /**
+     * 重命名知识域。
+     */
+    @PostMapping("/domains/{domain}/rename")
+    public Mono<Map<String, String>> renameDomain(
+            @PathVariable String domain,
+            @RequestBody RenameRequest body) {
+        return Mono.fromCallable(() -> {
+            knowledgeService.renameDomain(domain, body.newName());
+            return Map.of("status", "renamed", "oldName", domain, "newName", body.newName());
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
     /** 拆分请求体 */
     public record SplitRequest(String domain, List<KnowledgeMaintenanceService.SplitGroup> groups) {
         public KnowledgeMaintenanceService.SplitPlan toPlan() {
             return new KnowledgeMaintenanceService.SplitPlan(groups);
         }
     }
+
+    /** 重命名请求体 */
+    public record RenameRequest(String newName) {}
 }

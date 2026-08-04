@@ -711,6 +711,28 @@ const useStore = create((set, get) => ({
     return result;
   },
 
+  // Actions - Domain Rename
+  renameDomain: async (oldName, newName) => {
+    const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(oldName)}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newName }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || '重命名失败');
+    }
+    // 刷新域列表
+    get().fetchDomains();
+    // 如果当前正在查看该域，切换到新名称
+    const state = get();
+    if (state.selectedDomain === oldName) {
+      set({ selectedDomain: newName, entries: [] });
+      get().fetchEntries(newName);
+    }
+    return res.json();
+  },
+
   // Actions - Knowledge Import/Export
   exportKnowledgeBase: async () => {
     try {

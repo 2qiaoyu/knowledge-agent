@@ -745,6 +745,34 @@ public class KnowledgeService {
         }
     }
 
+    /**
+     * 重命名知识域：重命名文件 + 重建向量索引。
+     */
+    public void renameDomain(String oldName, String newName) {
+        if (oldName.equals(newName)) return;
+
+        Path oldFile = domainFile(oldName);
+        Path newFile = domainFile(newName);
+
+        try {
+            // 如果新名称文件已存在，不覆盖（避免数据丢失）
+            if (Files.exists(newFile)) {
+                throw new IllegalStateException("知识域 '" + newName + "' 已存在");
+            }
+
+            // 重命名文件
+            Files.move(oldFile, newFile);
+
+            // 重建向量索引（删除旧域名索引，用新域名重新索引）
+            reindexDomain(newName);
+
+            log.info("知识域重命名: '{}' → '{}'", oldName, newName);
+        } catch (IOException e) {
+            log.error("重命名知识域失败: '{}' → '{}': {}", oldName, newName, e.getMessage());
+            throw new RuntimeException("重命名失败: " + e.getMessage(), e);
+        }
+    }
+
     private void reindexEntry(String domain, String oldQuestion, String newQuestion, String newAnswer) {
         // Remove old vector entry by metadata filter, then add the updated one
         removeFromIndex(domain, oldQuestion);
