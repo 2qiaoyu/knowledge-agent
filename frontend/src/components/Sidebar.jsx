@@ -18,6 +18,7 @@ export default function Sidebar() {
   const searchQuery = useStore((s) => s.searchQuery);
   const searchResults = useStore((s) => s.searchResults);
   const reclassifyDomains = useStore((s) => s.reclassifyDomains);
+  const setShowGraph = useStore((s) => s.setShowGraph);
   const exportKnowledgeBase = useStore((s) => s.exportKnowledgeBase);
   const smartImportKnowledge = useStore((s) => s.smartImportKnowledge);
   const darkMode = useStore((s) => s.darkMode);
@@ -276,6 +277,13 @@ export default function Sidebar() {
                 disabled={reclassifying}
               >
                 {reclassifying ? '重新分类中…' : '↻ 拆分通用知识'}
+              </button>
+              <button
+                className="btn-graph"
+                onClick={() => setShowGraph(true)}
+                title="查看知识域概念关系图谱"
+              >
+                🕸 知识图谱
               </button>
               <ul className="domain-list">
                 {domains.map((d) => (

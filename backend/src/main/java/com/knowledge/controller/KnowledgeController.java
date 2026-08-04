@@ -1,5 +1,7 @@
 package com.knowledge.controller;
 
+import com.knowledge.model.GraphData;
+import com.knowledge.service.KnowledgeGraphService;
 import com.knowledge.service.KnowledgeService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
@@ -23,9 +25,11 @@ import java.util.zip.ZipOutputStream;
 public class KnowledgeController {
 
     private final KnowledgeService knowledgeService;
+    private final KnowledgeGraphService graphService;
 
-    public KnowledgeController(KnowledgeService knowledgeService) {
+    public KnowledgeController(KnowledgeService knowledgeService, KnowledgeGraphService graphService) {
         this.knowledgeService = knowledgeService;
+        this.graphService = graphService;
     }
 
     @GetMapping("/domains")
@@ -228,5 +232,24 @@ public class KnowledgeController {
                     }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
             );
         });
+    }
+
+    /**
+     * 获取知识图谱数据（概念节点 + 关系边）。
+     * 首次调用会通过 LLM 提取概念和关系，后续返回缓存。
+     */
+    @GetMapping("/graph")
+    public Mono<GraphData> getGraph() {
+        return Mono.fromCallable(graphService::getGraph)
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 重建知识图谱（清空缓存，重新从知识库提取）。
+     */
+    @PostMapping("/graph/rebuild")
+    public Mono<GraphData> rebuildGraph() {
+        return Mono.fromCallable(graphService::rebuildGraph)
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 }

@@ -143,6 +143,11 @@ const useStore = create((set, get) => ({
   // Knowledge recommendations
   recommendations: [], // [{ domain, question, answer }]
 
+  // Knowledge graph
+  graphData: null, // { nodes: [], edges: [] }
+  showGraph: false,
+  graphLoading: false,
+
   // Actions - Error handling
   clearChatError: () => set({ chatError: null }),
 
@@ -644,6 +649,37 @@ const useStore = create((set, get) => ({
 
   clearDomainView: () => set({ selectedDomain: null, domainContent: '', entries: [] }),
   setSidebarTab: (tab) => set({ sidebarTab: tab, selectedDomain: null, domainContent: '' }),
+
+  // Actions - Knowledge Graph
+  fetchGraphData: async () => {
+    set({ graphLoading: true });
+    try {
+      const res = await fetch('/api/knowledge/graph');
+      if (!res.ok) throw new Error('获取图谱失败');
+      const data = await res.json();
+      set({ graphData: data });
+    } catch (e) {
+      console.error('Failed to fetch knowledge graph', e);
+    } finally {
+      set({ graphLoading: false });
+    }
+  },
+
+  rebuildGraph: async () => {
+    set({ graphLoading: true });
+    try {
+      const res = await fetch('/api/knowledge/graph/rebuild', { method: 'POST' });
+      if (!res.ok) throw new Error('重建图谱失败');
+      const data = await res.json();
+      set({ graphData: data });
+    } catch (e) {
+      console.error('Failed to rebuild knowledge graph', e);
+    } finally {
+      set({ graphLoading: false });
+    }
+  },
+
+  setShowGraph: (v) => set({ showGraph: v }),
 
   // Actions - Knowledge Import/Export
   exportKnowledgeBase: async () => {

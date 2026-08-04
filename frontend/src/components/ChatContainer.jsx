@@ -4,6 +4,7 @@ import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 import MarkdownViewer from './MarkdownViewer';
 import KnowledgeViewer from './KnowledgeViewer';
+import KnowledgeGraph from './KnowledgeGraph';
 
 export default function ChatContainer() {
   const messages = useStore((s) => s.messages);
@@ -11,6 +12,7 @@ export default function ChatContainer() {
   const streamingContent = useStore((s) => s.streamingContent);
   const selectedDomain = useStore((s) => s.selectedDomain);
   const domainContent = useStore((s) => s.domainContent);
+  const showGraph = useStore((s) => s.showGraph);
   const stopGeneration = useStore((s) => s.stopGeneration);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sessions = useStore((s) => s.sessions);
@@ -35,6 +37,15 @@ export default function ChatContainer() {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, streamingContent, streaming]);
+
+  // Show knowledge graph if active
+  if (showGraph) {
+    return (
+      <main className="chat-container">
+        <KnowledgeGraph />
+      </main>
+    );
+  }
 
   // Show knowledge domain content if selected
   if (selectedDomain) {

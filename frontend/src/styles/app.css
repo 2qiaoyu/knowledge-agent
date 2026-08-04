@@ -1384,3 +1384,166 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+
+/* ==================== Knowledge Graph ==================== */
+.knowledge-graph {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.knowledge-graph-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.knowledge-graph-header h2 {
+  color: var(--accent);
+  font-size: 18px;
+  margin: 0;
+}
+
+.graph-info {
+  flex: 1;
+}
+
+.graph-stats {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.btn-rebuild {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-rebuild:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-rebuild:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.graph-canvas {
+  flex: 1;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.graph-loading,
+.graph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 15px;
+  gap: 8px;
+}
+
+.graph-empty-hint {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* Graph node label (domain nodes with count) */
+.graph-node-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.graph-node-domain {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.graph-node-count {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* React Flow node theming */
+.graph-node-domain {
+  background: var(--accent) !important;
+  color: white !important;
+  border: 2px solid var(--accent-dim) !important;
+  border-radius: 12px !important;
+  padding: 8px 14px !important;
+  font-weight: 600;
+  min-width: 100px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.graph-node-concept {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 12px;
+  text-align: center;
+}
+
+[data-theme="dark"] .graph-node-concept {
+  background: var(--card) !important;
+  border-color: var(--accent-dim) !important;
+}
+
+/* React Flow controls theming */
+.react-flow__controls button {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+.react-flow__controls button:hover {
+  background: var(--bg-tertiary) !important;
+}
+
+.react-flow__controls button svg {
+  fill: var(--text-primary) !important;
+}
+
+/* React Flow attribution hide (pro option handles it, but just in case) */
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Graph button in sidebar */
+.btn-graph {
+  width: 100%;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  margin-bottom: 8px;
+}
+
+.btn-graph:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--msg-user);
+}

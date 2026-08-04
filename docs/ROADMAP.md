@@ -1,6 +1,6 @@
 # 个人知识库 Agent — 需求规划
 
-> 最后更新: 2026-08-03 (v3 — 智能化 Phase 1 完成后)
+> 最后更新: 2026-08-04 (v4 — 知识图谱完成，P3 全部完成)
 
 ## 项目概述
 
@@ -44,7 +44,7 @@
 | 16 | 消息编辑 | ✅ 已完成 | 修改已发送的用户消息，后续 AI 回复联动更新 |
 | 17 | 删除单条消息 | ✅ 已完成 | 删除对话中的单条用户/AI 消息 |
 
-### P3 — 体验优化（已完成 4/5）
+### P3 — 体验优化（已完成 5/5）
 
 | # | 功能 | 状态 | 说明 |
 |---|------|------|------|
@@ -52,7 +52,7 @@
 | 19 | 暗色模式 | ✅ 已完成 | [data-theme="dark"] + CSS 变量，系统偏好检测，localStorage 持久化 |
 | 20 | 代码块复制按钮 | ✅ 已完成 | 代码块头部"复制"按钮，点击后变"✓ 已复制" |
 | 21 | 消息操作菜单 | ✅ 已完成 | 悬浮 ⋯ 按钮展开下拉菜单：复制/编辑/删除 |
-| 22 | 知识图谱 | ⏳ 待开发 | 可视化展示知识域之间的关系 |
+| 22 | 知识图谱 | ✅ 已完成 | LLM 提取概念 + @xyflow/react 交互式可视化 |
 
 ---
 
@@ -93,6 +93,8 @@
 | GET | `/api/knowledge/domains/{domain}` | 获取知识域内容 |
 | GET | `/api/knowledge/search?q=&topK=` | 向量搜索知识条目 |
 | GET | `/api/knowledge/recommend?q=&limit=` | 推荐相关知识条目 |
+| GET | `/api/knowledge/graph` | 获取知识图谱数据（节点 + 边） |
+| POST | `/api/knowledge/graph/rebuild` | 重建知识图谱 |
 | GET | `/api/knowledge/domains/{domain}/entries` | 列出知识域下的 Q&A 条目 |
 | PUT | `/api/knowledge/domains/{domain}/entries/{entryId}` | 编辑知识条目 |
 | DELETE | `/api/knowledge/domains/{domain}/entries/{entryId}` | 删除知识条目 |
@@ -129,6 +131,7 @@ App
     │   ├── 知识推荐卡片
     │   └── 错误提示 banner + 重试
     ├── KnowledgeViewer (知识域查看 + 条目编辑/删除)
+    ├── KnowledgeGraph (知识图谱可视化, @xyflow/react)
     └── ChatInput (textarea + 停止生成 + 联网搜索 + 模型选择)
 ```
 
@@ -187,6 +190,8 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 
 | 提交 | 说明 |
 |------|------|
+| | feat(knowledge): 知识图谱 — LLM 提取概念 + 交互式可视化 |
+| `b793ac0` | docs: 全面更新 ROADMAP v3 |
 | `8c525b9` | docs: 更新 ROADMAP 标记所有已完成项 |
 | `1ef9903` | feat(knowledge): Phase 1 智能化 — 主动推荐 + 问答增强 |
 | `bbe6d4c` | perf: 会话列表瘦身 + 保存防抖 |
