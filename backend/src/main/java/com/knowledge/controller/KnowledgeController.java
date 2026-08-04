@@ -78,22 +78,26 @@ public class KnowledgeController {
     }
 
     @PutMapping("/domains/{domain}/entries/{entryId}")
-    public Map<String, String> updateEntry(
+    public Mono<Map<String, String>> updateEntry(
             @PathVariable String domain,
             @PathVariable String entryId,
             @RequestBody Map<String, String> body) {
         String question = body.getOrDefault("question", "");
         String answer = body.getOrDefault("answer", "");
-        knowledgeService.updateEntry(domain, entryId, question, answer);
-        return Map.of("status", "updated");
+        return Mono.fromCallable(() -> {
+            knowledgeService.updateEntry(domain, entryId, question, answer);
+            return Map.of("status", "updated");
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @DeleteMapping("/domains/{domain}/entries/{entryId}")
-    public Map<String, String> deleteEntry(
+    public Mono<Map<String, String>> deleteEntry(
             @PathVariable String domain,
             @PathVariable String entryId) {
-        knowledgeService.deleteEntry(domain, entryId);
-        return Map.of("status", "deleted");
+        return Mono.fromCallable(() -> {
+            knowledgeService.deleteEntry(domain, entryId);
+            return Map.of("status", "deleted");
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @DeleteMapping("/domains/{domain}")
