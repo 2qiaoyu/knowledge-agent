@@ -4,6 +4,10 @@
 
 ## 功能概览
 
+![chat](imgs/chat.jpg)
+
+![knowledge_domain](imgs/knowledge_domain.jpg)
+
 ```mermaid
 mindmap
   root((个人知识库 Agent))
@@ -230,7 +234,7 @@ cp .env.example .env
 DEEPSEEK_API_KEY=sk-your-deepseek-api-key   # DeepSeek API Key
 ```
 
-联网搜索使用 Serper.dev（Google Search API），需在 `.env` 中配置 `SERPER_API_KEY`。注册获取 Key：https://serper.dev（免费额度 2500 次/月）。
+联网搜索使用 Serper.dev（Google Search API），需在 `.env` 中配置 `SERPER_API_KEY`。注册获取 Key：[https://serper.dev](https://serper.dev)（免费额度 2500 次/月）。
 
 ### 5. 启动后端
 
