@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人知识库 Agent — 功能展示</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --bg-card: #1e293b;
+    --bg-card-hover: #273548;
+    --border: #334155;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --purple: #a78bfa;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 40px 24px;
+    min-height: 100vh;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    margin-bottom: 48px;
+    padding: 32px 0;
+  }
+
+  .hero h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .hero p {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 40px;
+  }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title .badge {
+    font-size: 0.75rem;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+
+  .badge-done { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+  .badge-phase { background: rgba(129, 140, 248, 0.15); color: var(--accent2); }
+
+  /* Grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 14px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(56, 189, 248, 0.1);
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .card.c-blue::before { background: linear-gradient(90deg, #38bdf8, #0ea5e9); }
+  .card.c-green::before { background: linear-gradient(90deg, #34d399, #10b981); }
+  .card.c-purple::before { background: linear-gradient(90deg, #a78bfa, #8b5cf6); }
+  .card.c-orange::before { background: linear-gradient(90deg, #fb923c, #f97316); }
+  .card.c-pink::before { background: linear-gradient(90deg, #f472b6, #ec4899); }
+  .card.c-cyan::before { background: linear-gradient(90deg, #22d3ee, #06b6d4); }
+
+  .card-icon {
+    font-size: 1.6rem;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .card p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .card .tag {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-muted);
+  }
+
+  /* Stats row */
+  .stats {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-bottom: 48px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    text-align: center;
+    padding: 16px 28px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>个人知识库 Agent</h1>
+    <p>智能问答系统 · 联网搜索 · 对话自动整理为结构化知识库</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value">29</div>
+      <div class="stat-label">已完成功能</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">11</div>
+      <div class="stat-label">API 端点</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">81</div>
+      <div class="stat-label">测试用例</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">2</div>
+      <div class="stat-label">LLM 供应商</div>
+    </div>
+  </div>
+
+  <!-- P0 核心功能 -->
+  <div class="section">
+    <div class="section-title">
+      <span>核心功能</span>
+      <span class="badge badge-done">P0 已完成</span>
+    </div>
+    <div class="grid">
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F4AC;</span>
+        <h3>流式对话 (SSE)</h3>
+        <p>SSE 流式输出，渐进式渲染，实时显示 LLM 生成内容</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F9E0;</span>
+        <h3>多轮记忆</h3>
+        <p>会话级上下文记忆，按 sessionId 隔离，窗口 20 轮</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F50D;</span>
+        <h3>知识库 RAG 检索</h3>
+        <p>Chroma 向量相似度检索，topK=3，阈值 0.6</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F310;</span>
+        <h3>联网搜索</h3>
+        <p>Serper.dev Google Search API，可开关，带引用来源</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F916;</span>
+        <h3>多 LLM 供应商</h3>
+        <p>LongCat（默认）+ DeepSeek，可手动切换</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F4CA;</span>
+        <h3>知识域自动分类</h3>
+        <p>LLM 智能分类到知识域或创建新域</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x1F4D6;</span>
+        <h3>编号引用格式</h3>
+        <p>正文 [1][2] 引用 + 末尾参考来源列表</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x270D;&#xFE0F;</span>
+        <h3>流式 Markdown 渲染</h3>
+        <p>自动修复未闭合标记，渐进式渲染标题/代码块/粗体</p>
+      </div>
+      <div class="card c-blue">
+        <span class="card-icon">&#x2705;</span>
+        <h3>测试覆盖</h3>
+        <p>后端 39 cases + 前端 42 cases，共 81 个测试用例</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- P1 -->
+  <div class="section">
+    <div class="section-title">
+      <span>交互增强</span>
+      <span class="badge badge-done">P1 已完成</span>
+    </div>
+    <div class="grid">
+      <div class="card c-green">
+        <span class="card-icon">&#x23F9;&#xFE0F;</span>
+        <h3>停止生成</h3>
+        <p>AbortController 中断 fetch，WebFlux 自动取消 Flux</p>
+      </div>
+      <div class="card c-green">
+        <span class="card-icon">&#x1F504;</span>
+        <h3>重新生成</h3>
+        <p>移除末条 AI 消息，用最后一条用户问题重发</p>
+      </div>
+      <div class="card c-green">
+        <span class="card-icon">&#x1F50C;</span>
+        <h3>知识库搜索</h3>
+        <p>Sidebar 搜索框，向量检索跨域搜索，结果带预览</p>
+      </div>
+      <div class="card c-green">
+        <span class="card-icon">&#x270F;&#xFE0F;</span>
+        <h3>知识条目管理</h3>
+        <p>查看/编辑/删除单条 Q&A 条目，内联编辑</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- P2 -->
+  <div class="section">
+    <div class="section-title">
+      <span>导入导出</span>
+      <span class="badge badge-done">P2 已完成</span>
+    </div>
+    <div class="grid">
+      <div class="card c-purple">
+        <span class="card-icon">&#x1F4E5;</span>
+        <h3>会话导出</h3>
+        <p>前端导出会话为 Markdown 文件</p>
+      </div>
+      <div class="card c-purple">
+        <span class="card-icon">&#x1F4E6;</span>
+        <h3>知识库导入/导出</h3>
+        <p>导出 zip / 快速导入 / 智能导入（LLM 提炼 Q&A）</p>
+      </div>
+      <div class="card c-purple">
+        <span class="card-icon">&#x2712;&#xFE0F;</span>
+        <h3>消息编辑</h3>
+        <p>修改已发送的用户消息，后续 AI 回复联动更新</p>
+      </div>
+      <div class="card c-purple">
+        <span class="card-icon">&#x1F5D1;&#xFE0F;</span>
+        <h3>删除单条消息</h3>
+        <p>删除对话中的单条用户/AI 消息</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- P3 -->
+  <div class="section">
+    <div class="section-title">
+      <span>体验优化</span>
+      <span class="badge badge-done">P3 已完成</span>
+    </div>
+    <div class="grid">
+      <div class="card c-orange">
+        <span class="card-icon">&#x2328;&#xFE0F;</span>
+        <h3>键盘快捷键</h3>
+        <p>Ctrl+N 新对话、Ctrl+K 聚焦搜索、Esc 停止生成</p>
+      </div>
+      <div class="card c-orange">
+        <span class="card-icon">&#x1F319;</span>
+        <h3>暗色模式</h3>
+        <p>CSS 变量 + 系统偏好检测 + localStorage 持久化</p>
+      </div>
+      <div class="card c-orange">
+        <span class="card-icon">&#x1F4CB;</span>
+        <h3>代码块复制按钮</h3>
+        <p>代码块头部"复制"按钮，点击后变"✓ 已复制"</p>
+      </div>
+      <div class="card c-orange">
+        <span class="card-icon">&#x22EE;</span>
+        <h3>消息操作菜单</h3>
+        <p>悬浮 ⋯ 按钮展开下拉菜单：复制/编辑/删除</p>
+      </div>
+      <div class="card c-orange">
+        <span class="card-icon">&#x1F5A5;&#xFE0F;</span>
+        <h3>知识图谱</h3>
+        <p>LLM 提取概念 + @xyflow/react 交互式可视化</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- P4 -->
+  <div class="section">
+    <div class="section-title">
+      <span>知识维护</span>
+      <span class="badge badge-done">P4 已完成</span>
+    </div>
+    <div class="grid">
+      <div class="card c-pink">
+        <span class="card-icon">&#x1F3F7;&#xFE0F;</span>
+        <h3>知识域重命名</h3>
+        <p>重命名知识域，同步更新 Markdown 文件和向量索引</p>
+      </div>
+      <div class="card c-pink">
+        <span class="card-icon">&#x1F5C2;&#xFE0F;</span>
+        <h3>知识域整理与拆分</h3>
+        <p>LLM 分析域内容，将混杂域拆分为多个精确域</p>
+      </div>
+      <div class="card c-pink">
+        <span class="card-icon">&#x2728;</span>
+        <h3>知识条目优化</h3>
+        <p>LLM 优化单条 Q&A，保留 Markdown 格式和参考来源</p>
+      </div>
+      <div class="card c-pink">
+        <span class="card-icon">&#x1F310;</span>
+        <h3>网页 URL 导入</h3>
+        <p>输入 URL 自动抓取网页内容，LLM 提炼 Q&A 并分类入库</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 1 智能化 -->
+  <div class="section">
+    <div class="section-title">
+      <span>智能化</span>
+      <span class="badge badge-phase">Phase 1 已完成</span>
+    </div>
+    <div class="grid">
+      <div class="card c-cyan">
+        <span class="card-icon">&#x1F4A1;</span>
+        <h3>主动知识推荐</h3>
+        <p>问答结束后自动推荐相关知识条目，点击跳转</p>
+      </div>
+      <div class="card c-cyan">
+        <span class="card-icon">&#x1F914;</span>
+        <h3>智能问答增强</h3>
+        <p>LLM 融合多条知识形成结构化回答，标注知识缺口</p>
+      </div>
+      <div class="card c-cyan">
+        <span class="card-icon">&#x1F4E5;</span>
+        <h3>会话归档</h3>
+        <p>活跃/归档分离，防止 sessions.json 无限增长</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2 部分完成 -->
+  <div class="section">
+    <div class="section-title">
+      <span>知识自动化</span>
+      <span class="badge badge-phase">Phase 2 进行中</span>
+    </div>
+    <div class="grid">
+      <div class="card c-cyan">
+        <span class="card-icon">&#x1F30D;</span>
+        <h3>URL 网页抓取</h3>
+        <p>输入 URL 抓取内容，LLM 提炼 Q&A 并自动分类</p>
+        <span class="tag">✅ 已完成</span>
+      </div>
+      <div class="card c-cyan" style="opacity: 0.6;">
+        <span class="card-icon">&#x1F9F9;</span>
+        <h3>知识自动维护</h3>
+        <p>定时合并重复条目、检测矛盾内容、标记过时知识</p>
+        <span class="tag">🔴 待开发</span>
+      </div>
+      <div class="card c-cyan" style="opacity: 0.6;">
+        <span class="card-icon">&#x1F4CA;</span>
+        <h3>知识健康报告</h3>
+        <p>知识域统计、重复率、活跃度、知识缺口分析</p>
+        <span class="tag">🟡 待开发</span>
+      </div>
+      <div class="card c-cyan" style="opacity: 0.6;">
+        <span class="card-icon">&#x1F4D1;</span>
+        <h3>多源导入扩展</h3>
+        <p>浏览器书签导入、剪贴板监控</p>
+        <span class="tag">🟢 待开发</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    个人知识库 Agent &middot; React 18 + Spring Boot 4.1 + Spring AI 2.0 + Chroma + Ollama
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # 个人知识库 Agent — 需求规划
 
-> 最后更新: 2026-08-04 (v4 — 知识图谱完成，P3 全部完成)
+> 最后更新: 2026-08-05 (v5 — 知识维护工具完成，Phase 2 部分完成)
 
 ## 项目概述
 
@@ -54,6 +54,15 @@
 | 21 | 消息操作菜单 | ✅ 已完成 | 悬浮 ⋯ 按钮展开下拉菜单：复制/编辑/删除 |
 | 22 | 知识图谱 | ✅ 已完成 | LLM 提取概念 + @xyflow/react 交互式可视化 |
 
+### P4 — 知识维护工具（已完成 4/4）
+
+| # | 功能 | 状态 | 说明 |
+|---|------|------|------|
+| 26 | 知识域重命名 | ✅ 已完成 | 重命名知识域，同步更新 Markdown 文件和向量索引 |
+| 27 | 知识域整理与拆分 | ✅ 已完成 | LLM 分析域内容，将混杂域拆分为多个精确域 |
+| 28 | 知识条目优化 | ✅ 已完成 | LLM 优化单条 Q&A，保留 Markdown 格式和参考来源 |
+| 29 | 网页 URL 导入 | ✅ 已完成 | 输入 URL 自动抓取网页内容，LLM 提炼 Q&A 并分类入库 |
+
 ---
 
 ## 智能化功能（Phase 1）
@@ -63,6 +72,15 @@
 | 23 | 主动知识推荐 | ✅ 已完成 | 问答结束后自动推荐相关知识条目，点击跳转 |
 | 24 | 智能问答增强 | ✅ 已完成 | LLM 融合多条知识形成结构化回答，标注知识缺口 |
 | 25 | 会话归档 | ✅ 已完成 | 活跃/归档分离，防止 sessions.json 无限增长 |
+
+## Phase 2 — 知识自动化（已完成 1/4）
+
+| # | 功能 | 状态 | 说明 |
+|---|------|------|------|
+| 30 | 多源导入 — URL 网页抓取 | ✅ 已完成 | 输入 URL 抓取内容，LLM 提炼 Q&A 并自动分类 |
+| 31 | 知识自动维护（合并/去重/标记过时） | 🔴 待开发 | 定时合并重复条目、检测矛盾内容、标记过时知识 |
+| 32 | 知识健康报告 | 🟡 待开发 | 知识域统计、重复率、活跃度、知识缺口分析 |
+| 33 | 多源导入扩展（书签/剪贴板） | 🟢 待开发 | 浏览器书签导入、剪贴板监控 |
 
 ---
 
@@ -99,8 +117,12 @@
 | PUT | `/api/knowledge/domains/{domain}/entries/{entryId}` | 编辑知识条目 |
 | DELETE | `/api/knowledge/domains/{domain}/entries/{entryId}` | 删除知识条目 |
 | DELETE | `/api/knowledge/domains/{domain}` | 删除整个知识域 |
+| PUT | `/api/knowledge/domains/{domain}/rename` | 重命名知识域 |
+| POST | `/api/knowledge/domains/{domain}/split` | 拆分知识域（LLM 分析并迁移条目） |
+| POST | `/api/knowledge/domains/{domain}/entries/{entryId}/optimize` | LLM 优化单条知识条目 |
 | POST | `/api/knowledge/domains/{domain}/reindex` | 重建域的向量索引（维护工具） |
 | POST | `/api/knowledge/reclassify` | 重新分类"通用知识"条目 |
+| POST | `/api/knowledge/import-url` | 网页 URL 导入：抓取内容 + LLM 提炼 Q&A |
 | GET | `/api/knowledge/export` | 导出全部知识域为 zip |
 | POST | `/api/knowledge/import?domain=` | 快速导入：按标题拆分 .md 文件 |
 | POST | `/api/knowledge/smart-import` | 智能导入：LLM 提炼 Q&A + 自动分类 |
@@ -132,6 +154,7 @@ App
     │   └── 错误提示 banner + 重试
     ├── KnowledgeViewer (知识域查看 + 条目编辑/删除)
     ├── KnowledgeGraph (知识图谱可视化, @xyflow/react)
+    ├── DomainManager (知识域重命名/拆分)
     └── ChatInput (textarea + 停止生成 + 联网搜索 + 模型选择)
 ```
 
@@ -176,6 +199,10 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 | T3 | sessions.json 无限增长 | 会话归档机制（活跃/归档分离） | `SessionService.java`, `ChatController.java`, `Session.java` |
 | T4 | 前端流式错误静默 | chatError 状态 + 错误 banner + 重试 + 保留部分内容 | `store.js`, `ChatMessages.jsx`, `app.css` |
 | T5 | store.js SSE 逻辑重复 | 提取 consumeStream() + saveAssistantMessage() | `store.js` |
+| T8 | SSE 解析器嵌套 data: 前缀 | 修复 parseSSEBuffer 处理 `data: data:` 格式 | `store.js` |
+| T9 | SSE 流结束残留 buffer | 流结束时正确处理 buffer 中剩余数据 | `store.js` |
+| T10 | 知识条目编辑丢失来源 | updateEntry 时保留 Markdown 格式和参考来源 | `KnowledgeService.java` |
+| T11 | 知识域拆分后残留 | 拆分后正确删除原域中已迁移的条目 | `KnowledgeService.java` |
 
 ### ⏳ 待修复
 
@@ -190,7 +217,19 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 
 | 提交 | 说明 |
 |------|------|
-| | feat(knowledge): 知识图谱 — LLM 提取概念 + 交互式可视化 |
+| `4d14df8` | feat: 网页 URL 导入知识 + 修复标题格式和编辑丢失来源 |
+| `e7d9ed8` | fix: 优化条目替换后立即刷新 + 复用 SSE 解析器 |
+| `19a5507` | fix: 优化条目 prompt 参考 ChatService 结构化格式 |
+| `c4296bc` | fix: 优化条目时保留 Markdown 格式和参考来源 |
+| `8606d72` | fix: updateEntry/deleteEntry 端点添加 boundedElastic 调度 |
+| `8d190af` | fix(ui): 修复 SSE 解析器处理嵌套 data: 前缀 |
+| `dade8c0` | fix(ui): SSE 流结束时正确处理 buffer 中剩余数据 |
+| `b5c35be` | feat(knowledge): LLM 优化单个知识条目 |
+| `25c4116` | fix(ui): 切换知识域时滚动条重置到顶部 |
+| `50f04e3` | feat(knowledge): 支持重命名知识域 |
+| `50fc54b` | fix(knowledge): 拆分后正确删除原域中已迁移的条目 |
+| `aa6afb4` | feat(knowledge): 知识域整理与拆分 |
+| `b88abf7` | feat(knowledge): 知识图谱 — LLM 提取概念 + 交互式可视化 |
 | `b793ac0` | docs: 全面更新 ROADMAP v3 |
 | `8c525b9` | docs: 更新 ROADMAP 标记所有已完成项 |
 | `1ef9903` | feat(knowledge): Phase 1 智能化 — 主动推荐 + 问答增强 |
@@ -206,13 +245,3 @@ useEffect 是 React 的 Hook，用于在组件渲染后执行副作用...
 | `703ed3f` | fix(memory): 限制 ChatMemory 窗口为 20 轮 |
 | `9dfd503` | feat(knowledge): 知识库导入/导出 + LLM 智能导入 |
 
----
-
-## 后续规划（Phase 2）
-
-| # | 功能 | 说明 | 优先级 |
-|---|------|------|--------|
-| 1 | 知识自动维护 | 定时合并重复条目、检测矛盾内容、标记过时知识 | 🔴 高 |
-| 2 | 知识健康报告 | 知识域统计、重复率、活跃度、知识缺口分析 | 🟡 中 |
-| 3 | 多源自动导入 | URL 网页抓取、浏览器书签、剪贴板监控 | 🟡 中 |
-| 4 | 知识图谱 | 自动提取概念间关系，交互式可视化 | 🟢 低 |
