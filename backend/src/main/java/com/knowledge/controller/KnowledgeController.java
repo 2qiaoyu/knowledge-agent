@@ -285,6 +285,39 @@ public class KnowledgeController {
     }
 
     /**
+     * 生成知识维护报告（重复/矛盾/过时检测）。
+     */
+    @PostMapping("/domains/{domain}/maintenance/report")
+    public Mono<KnowledgeMaintenanceService.MaintenanceReport> generateReport(@PathVariable String domain) {
+        return Mono.fromCallable(() -> maintenanceService.generateReport(domain))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 执行合并重复条目。
+     */
+    @PostMapping("/domains/{domain}/maintenance/merge")
+    public Mono<KnowledgeMaintenanceService.MergeResult> executeMerge(
+            @PathVariable String domain,
+            @RequestBody MergeRequest body) {
+        return Mono.fromCallable(() -> maintenanceService.executeMerge(domain, body.groups()))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * 删除过时条目。
+     */
+    @PostMapping("/domains/{domain}/maintenance/delete-outdated")
+    public Mono<Map<String, Object>> deleteOutdated(
+            @PathVariable String domain,
+            @RequestBody DeleteOutdatedRequest body) {
+        return Mono.fromCallable(() -> {
+            maintenanceService.deleteOutdated(domain, body.entryIndices());
+            return Map.<String, Object>of("status", "deleted", "count", body.entryIndices().size());
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
      * 重命名知识域。
      */
     @PostMapping("/domains/{domain}/rename")
@@ -371,4 +404,10 @@ public class KnowledgeController {
 
     /** 网页导入请求体 */
     public record ImportUrlRequest(String url, String title, String text, String provider) {}
+
+    /** 合并请求体 */
+    public record MergeRequest(List<KnowledgeMaintenanceService.MergeGroup> groups) {}
+
+    /** 删除过时条目请求体 */
+    public record DeleteOutdatedRequest(List<Integer> entryIndices) {}
 }

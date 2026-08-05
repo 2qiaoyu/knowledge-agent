@@ -63,6 +63,40 @@ public class KnowledgeMaintenanceService {
      */
     public record MergeSuggestion(List<DuplicateGroup> duplicates) {}
 
+    /**
+     * 矛盾内容组。
+     */
+    public record ContradictionGroup(
+            Integer entryIdx1, Integer entryIdx2,
+            String question1, String question2,
+            String description) {}
+
+    /**
+     * 过时条目。
+     */
+    public record OutdatedEntry(
+            Integer entryIdx, String question,
+            String date, String reason) {}
+
+    /**
+     * 维护报告：综合重复、矛盾、过时三项检测结果。
+     */
+    public record MaintenanceReport(
+            String domain,
+            List<DuplicateGroup> duplicates,
+            List<ContradictionGroup> contradictions,
+            List<OutdatedEntry> outdated) {}
+
+    /**
+     * 合并执行结果。
+     */
+    public record MergeResult(int mergedGroups, int deletedEntries) {}
+
+    /**
+     * 合并请求中的一组。
+     */
+    public record MergeGroup(List<Integer> entryIndices) {}
+
     // ---- API ----
 
     /**
@@ -311,6 +345,224 @@ public class KnowledgeMaintenanceService {
 
         knowledgeService.rewriteDomainFile(domain, sb.toString());
         log.info("从 '{}' 删除了 {} 条已迁移条目", domain, migratedIndices.size());
+    }
+
+    // ---- 知识自动维护 ----
+
+    /**
+     * 生成维护报告：综合检测重复、矛盾、过时条目。
+     * 三项检测并行执行。
+     */
+    public MaintenanceReport generateReport(String domain) {
+        List<KnowledgeService.EntryRef> entries = knowledgeService.listEntries(domain);
+        if (entries.isEmpty()) {
+            return new MaintenanceReport(domain, List.of(), List.of(), List.of());
+        }
+
+        // 并行执行三项检测
+        try {
+            var dupFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> suggestMerge(domain).duplicates());
+            var contrFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> detectContradictions(domain, entries));
+            var outdatedFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> detectOutdated(domain, entries));
+
+            List<DuplicateGroup> duplicates = dupFuture.get();
+            List<ContradictionGroup> contradictions = contrFuture.get();
+            List<OutdatedEntry> outdated = outdatedFuture.get();
+
+            return new MaintenanceReport(domain, duplicates, contradictions, outdated);
+        } catch (Exception e) {
+            log.error("生成维护报告失败 [{}]: {}", domain, e.getMessage(), e);
+            return new MaintenanceReport(domain, List.of(), List.of(), List.of());
+        }
+    }
+
+    /**
+     * 检测域内矛盾内容。
+     */
+    private List<ContradictionGroup> detectContradictions(String domain, List<KnowledgeService.EntryRef> entries) {
+        if (entries.size() < 2) return List.of();
+
+        StringBuilder entriesText = new StringBuilder();
+        for (int i = 0; i < entries.size(); i++) {
+            var e = entries.get(i);
+            String answerPreview = e.answer().length() > 150
+                    ? e.answer().substring(0, 150) + "..." : e.answer();
+            entriesText.append(i).append(". Q: ").append(e.question()).append("\n");
+            entriesText.append("   A: ").append(answerPreview).append("\n\n");
+        }
+
+        String prompt = """
+                分析以下知识域中的问答条目，找出内容互相矛盾或冲突的条目对。
+
+                知识域：%s
+                问答列表：
+                %s
+
+                规则：
+                1. 只在两条条目对同一问题给出明显不同/矛盾的答案时标记
+                2. 细微差异不算矛盾，只有核心观点冲突才算
+                3. 以 JSON 返回，不要解释
+                4. 如果没有矛盾，返回空数组
+
+                返回格式：
+                {
+                  "contradictions": [
+                    {
+                      "entry1": 0,
+                      "entry2": 3,
+                      "description": "条目0说X是对的，条目3说X是错误的"
+                    }
+                  ]
+                }
+
+                结果：
+                """.formatted(domain, entriesText);
+
+        try {
+            String result = callLlmWithRetry(prompt);
+            result = stripJsonBlock(result);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = MAPPER.readValue(result, Map.class);
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> contrs = (List<Map<String, Object>>) parsed.getOrDefault("contradictions", List.of());
+
+            List<ContradictionGroup> groups = new ArrayList<>();
+            for (Map<String, Object> c : contrs) {
+                Integer e1 = ((Number) c.getOrDefault("entry1", -1)).intValue();
+                Integer e2 = ((Number) c.getOrDefault("entry2", -1)).intValue();
+                String description = (String) c.getOrDefault("description", "");
+                if (e1 >= 0 && e2 >= 0 && e1 < entries.size() && e2 < entries.size() && !e1.equals(e2)) {
+                    groups.add(new ContradictionGroup(e1, e2,
+                            entries.get(e1).question(), entries.get(e2).question(), description));
+                }
+            }
+            return groups;
+        } catch (Exception e) {
+            log.warn("矛盾检测失败 [{}]: {}", domain, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 检测过时条目（基于日期阈值）。
+     */
+    private List<OutdatedEntry> detectOutdated(String domain, List<KnowledgeService.EntryRef> entries) {
+        // 日期阈值：180 天
+        final long OUTDATED_DAYS = 180;
+        long threshold = System.currentTimeMillis() - (OUTDATED_DAYS * 24 * 60 * 60 * 1000L);
+
+        List<OutdatedEntry> outdated = new ArrayList<>();
+        java.time.format.DateTimeFormatter parser = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+        for (int i = 0; i < entries.size(); i++) {
+            var entry = entries.get(i);
+            // 从 sources 字段中提取日期（EntryRef 不直接存日期，需从文件解析）
+            // 简化处理：检查文件中的日期行
+            String dateStr = extractDate(entry);
+            if (dateStr == null) continue;
+
+            try {
+                java.time.LocalDateTime date = java.time.LocalDateTime.parse(dateStr, parser);
+                long entryMillis = date.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                if (entryMillis < threshold) {
+                    long daysOld = (System.currentTimeMillis() - entryMillis) / (24 * 60 * 60 * 1000);
+                    outdated.add(new OutdatedEntry(i, entry.question(), dateStr,
+                            "已存在 " + daysOld + " 天，可能过时"));
+                }
+            } catch (Exception e) {
+                // 解析失败，跳过
+            }
+        }
+        return outdated;
+    }
+
+    /**
+     * 从 EntryRef 的 sources 附近提取日期（简化版）。
+     */
+    private String extractDate(KnowledgeService.EntryRef entry) {
+        // EntryRef 的 sources 字段包含日期行信息，格式为：**日期**: 2026-01-15 10:30 | **来源**: ...
+        if (entry.sources() != null && entry.sources().contains("**日期**:") ) {
+            int start = entry.sources().indexOf("**日期**:") + 7;
+            int end = entry.sources().indexOf(" ", start + 11); // "2026-01-15" + space
+            if (end > start && end - start >= 10) {
+                return entry.sources().substring(start, Math.min(start + 16, entry.sources().length())).trim();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 执行合并：对每组重复条目，保留最详细的一条，合并来源，删除其余。
+     */
+    public MergeResult executeMerge(String domain, List<MergeGroup> groups) {
+        List<KnowledgeService.EntryRef> entries = knowledgeService.listEntries(domain);
+        int deletedCount = 0;
+
+        for (MergeGroup group : groups) {
+            List<Integer> indices = group.entryIndices().stream()
+                    .filter(i -> i >= 0 && i < entries.size())
+                    .sorted(java.util.Collections.reverseOrder()) // 从后往前删除，避免索引偏移
+                    .toList();
+
+            if (indices.size() < 2) continue;
+
+            // 选择答案最长的作为主条目（索引最小的）
+            int masterIdx = indices.stream()
+                    .min((a, b) -> Integer.compare(entries.get(b).answer().length(), entries.get(a).answer().length()))
+                    .orElse(indices.get(0));
+
+            // 收集所有来源
+            Set<String> allSources = new java.util.LinkedHashSet<>();
+            for (int idx : indices) {
+                var e = entries.get(idx);
+                if (e.sources() != null && !e.sources().isBlank()) {
+                    // 提取来源部分（去掉日期前缀）
+                    String src = e.sources();
+                    if (src.contains("**来源**:")) {
+                        src = src.substring(src.indexOf("**来源**:") + 7).trim();
+                    } else if (src.contains("**来源**")) {
+                        src = src.substring(src.indexOf("**来源**") + 6).trim().replaceFirst("^[：:]", "");
+                    }
+                    if (!src.isBlank()) allSources.add(src);
+                }
+            }
+
+            // 删除非主条目（从后往前删）
+            List<Integer> toDelete = indices.stream()
+                    .filter(i -> !i.equals(masterIdx))
+                    .sorted(java.util.Collections.reverseOrder())
+                    .toList();
+
+            for (int idx : toDelete) {
+                knowledgeService.deleteEntry(domain, String.valueOf(idx));
+                deletedCount++;
+            }
+        }
+
+        // 重新索引该域
+        knowledgeService.reindexDomain(domain);
+        return new MergeResult(groups.size(), deletedCount);
+    }
+
+    /**
+     * 删除过时条目。
+     */
+    public void deleteOutdated(String domain, List<Integer> entryIndices) {
+        List<KnowledgeService.EntryRef> entries = knowledgeService.listEntries(domain);
+        // 从大到小排序，避免删除后索引偏移
+        List<Integer> sorted = entryIndices.stream()
+                .filter(i -> i >= 0 && i < entries.size())
+                .sorted(java.util.Collections.reverseOrder())
+                .toList();
+
+        for (int idx : sorted) {
+            knowledgeService.deleteEntry(domain, String.valueOf(idx));
+        }
+
+        // 重新索引
+        knowledgeService.reindexDomain(domain);
+        log.info("删除 {} 条过时条目 from '{}'", sorted.size(), domain);
     }
 
     // ---- 内部方法 ----

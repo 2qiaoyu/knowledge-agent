@@ -733,6 +733,39 @@ const useStore = create((set, get) => ({
     return res.json();
   },
 
+  // Actions - Knowledge Maintenance
+  fetchMaintenanceReport: async (domain) => {
+    const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/maintenance/report`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('获取维护报告失败');
+    return res.json();
+  },
+
+  executeMergeMaintenance: async (domain, groups) => {
+    const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/maintenance/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groups }),
+    });
+    if (!res.ok) throw new Error('执行合并失败');
+    get().fetchEntries(domain);
+    get().markKnowledgeModified();
+    return res.json();
+  },
+
+  deleteOutdatedEntries: async (domain, entryIndices) => {
+    const res = await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/maintenance/delete-outdated`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entryIndices }),
+    });
+    if (!res.ok) throw new Error('删除失败');
+    get().fetchEntries(domain);
+    get().markKnowledgeModified();
+    return res.json();
+  },
+
   // Actions - Knowledge Import/Export
   exportKnowledgeBase: async () => {
     try {

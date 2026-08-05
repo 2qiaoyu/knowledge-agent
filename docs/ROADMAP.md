@@ -78,7 +78,7 @@
 | # | 功能 | 状态 | 说明 |
 |---|------|------|------|
 | 30 | 多源导入 — URL 网页抓取 | ✅ 已完成 | 输入 URL 抓取内容，LLM 提炼 Q&A 并自动分类 |
-| 31 | 知识自动维护（合并/去重/标记过时） | 🔴 待开发 | 定时合并重复条目、检测矛盾内容、标记过时知识 |
+| 31 | 知识自动维护（合并/矛盾检测/过时清理） | ✅ 已完成 | LLM 检测重复+矛盾，日期阈值检测过时，人工确认后执行 |
 | 32 | 知识健康报告 | 🟡 待开发 | 知识域统计、重复率、活跃度、知识缺口分析 |
 | 33 | 多源导入扩展（书签/剪贴板） | 🟢 待开发 | 浏览器书签导入、剪贴板监控 |
 
@@ -120,6 +120,9 @@
 | PUT | `/api/knowledge/domains/{domain}/rename` | 重命名知识域 |
 | POST | `/api/knowledge/domains/{domain}/split` | 拆分知识域（LLM 分析并迁移条目） |
 | POST | `/api/knowledge/domains/{domain}/entries/{entryId}/optimize` | LLM 优化单条知识条目 |
+| POST | `/api/knowledge/domains/{domain}/maintenance/report` | 生成维护报告（重复/矛盾/过时检测） |
+| POST | `/api/knowledge/domains/{domain}/maintenance/merge` | 执行合并重复条目 |
+| POST | `/api/knowledge/domains/{domain}/maintenance/delete-outdated` | 删除过时条目 |
 | POST | `/api/knowledge/domains/{domain}/reindex` | 重建域的向量索引（维护工具） |
 | POST | `/api/knowledge/import-url` | 网页 URL 导入：抓取内容 + LLM 提炼 Q&A |
 | GET | `/api/knowledge/export` | 导出全部知识域为 zip |
@@ -154,6 +157,7 @@ App
     ├── KnowledgeViewer (知识域查看 + 条目编辑/删除)
     ├── KnowledgeGraph (知识图谱可视化, @xyflow/react)
     ├── DomainManager (知识域重命名/拆分)
+    ├── MaintenancePanel (知识维护：重复/矛盾/过时检测)
     └── ChatInput (textarea + 停止生成 + 联网搜索 + 模型选择)
 ```
 

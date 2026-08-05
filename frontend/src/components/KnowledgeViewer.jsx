@@ -3,6 +3,7 @@ import useStore from '../store';
 import MarkdownViewer from './MarkdownViewer';
 import DomainOrganizer from './DomainOrganizer';
 import EntryOptimizer from './EntryOptimizer';
+import MaintenancePanel from './MaintenancePanel';
 
 export default function KnowledgeViewer() {
   const selectedDomain = useStore((s) => s.selectedDomain);
@@ -22,6 +23,7 @@ export default function KnowledgeViewer() {
   const [importing, setImporting] = useState(false);
   const [smartImporting, setSmartImporting] = useState(false);
   const [showOrganizer, setShowOrganizer] = useState(false);
+  const [showMaintenance, setShowMaintenance] = useState(false);
   const [optimizingEntry, setOptimizingEntry] = useState(null);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -196,6 +198,13 @@ export default function KnowledgeViewer() {
           >
             ⚙ 整理
           </button>
+          <button
+            className="btn-maintenance"
+            onClick={() => setShowMaintenance(true)}
+            title="知识自动维护：检测重复、矛盾、过时内容"
+          >
+            &#x1f527; 维护
+          </button>
         </div>
         <button className="btn-back" onClick={clearDomainView}>
           返回
@@ -270,9 +279,18 @@ export default function KnowledgeViewer() {
           onClose={(success) => {
             setShowOrganizer(false);
             if (success) {
-              // 拆分成功，刷新条目列表
               clearDomainView();
             }
+          }}
+        />
+      )}
+
+      {showMaintenance && (
+        <MaintenancePanel
+          domain={selectedDomain}
+          onClose={() => {
+            setShowMaintenance(false);
+            fetchEntries(selectedDomain);
           }}
         />
       )}
