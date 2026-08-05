@@ -121,7 +121,6 @@
 | POST | `/api/knowledge/domains/{domain}/split` | 拆分知识域（LLM 分析并迁移条目） |
 | POST | `/api/knowledge/domains/{domain}/entries/{entryId}/optimize` | LLM 优化单条知识条目 |
 | POST | `/api/knowledge/domains/{domain}/reindex` | 重建域的向量索引（维护工具） |
-| POST | `/api/knowledge/reclassify` | 重新分类"通用知识"条目 |
 | POST | `/api/knowledge/import-url` | 网页 URL 导入：抓取内容 + LLM 提炼 Q&A |
 | GET | `/api/knowledge/export` | 导出全部知识域为 zip |
 | POST | `/api/knowledge/import?domain=` | 快速导入：按标题拆分 .md 文件 |

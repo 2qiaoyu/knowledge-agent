@@ -634,19 +634,6 @@ const useStore = create((set, get) => ({
     }
   },
 
-  reclassifyDomains: async () => {
-    try {
-      const res = await fetch('/api/knowledge/reclassify', { method: 'POST' });
-      const data = await res.json();
-      // Refresh domain list after reclassification
-      get().fetchDomains();
-      return data;
-    } catch (e) {
-      console.error('Failed to reclassify', e);
-      throw e;
-    }
-  },
-
   clearDomainView: () => set({ selectedDomain: null, domainContent: '', entries: [] }),
   setSidebarTab: (tab) => set({ sidebarTab: tab, selectedDomain: null, domainContent: '' }),
 

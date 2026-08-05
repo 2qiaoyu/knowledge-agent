@@ -140,29 +140,6 @@ html, body, #root {
   background: var(--bg-tertiary);
 }
 
-.btn-reclassify {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 6px;
-  font-size: 13px;
-  margin-bottom: 8px;
-  transition: background 0.2s, color 0.2s;
-}
-
-.btn-reclassify:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-  color: var(--accent);
-}
-
-.btn-reclassify:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
 .session-list, .domain-list {
   list-style: none;
 }
