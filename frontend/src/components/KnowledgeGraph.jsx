@@ -18,6 +18,12 @@ export default function KnowledgeGraph() {
   const rebuildGraph = useStore((s) => s.rebuildGraph);
   const setShowGraph = useStore((s) => s.setShowGraph);
   const darkMode = useStore((s) => s.darkMode);
+  const graphLastBuiltAt = useStore((s) => s.graphLastBuiltAt);
+  const knowledgeLastModifiedAt = useStore((s) => s.knowledgeLastModifiedAt);
+
+  // Graph is stale if knowledge was modified after the graph was last built
+  const isStale = knowledgeLastModifiedAt && graphLastBuiltAt
+    && knowledgeLastModifiedAt > graphLastBuiltAt;
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -160,6 +166,15 @@ export default function KnowledgeGraph() {
           {rebuilding ? '重建中...' : '↻ 重建'}
         </button>
       </div>
+      {isStale && (
+        <div className="graph-stale-banner">
+          <span className="graph-stale-icon">⚠️</span>
+          <span>知识库有新内容，图谱数据可能不是最新</span>
+          <button className="btn-rebuild-small" onClick={handleRebuild} disabled={rebuilding}>
+            {rebuilding ? '重建中...' : '立即重建'}
+          </button>
+        </div>
+      )}
       {isEmpty ? (
         <div className="graph-empty">
           <p>知识库为空，无法构建图谱</p>

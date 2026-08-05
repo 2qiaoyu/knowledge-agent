@@ -1518,6 +1518,55 @@ html, body, #root {
   opacity: 0.7;
 }
 
+/* Graph stale banner */
+.graph-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(251, 146, 60, 0.12);
+  border-bottom: 1px solid rgba(251, 146, 60, 0.3);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.graph-stale-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.btn-rebuild-small {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-rebuild-small:hover:not(:disabled) {
+  background: rgba(251, 146, 60, 0.2);
+  border-color: #fb923c;
+}
+
+.btn-rebuild-small:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+[data-theme="dark"] .graph-stale-banner {
+  background: rgba(251, 146, 60, 0.1);
+  border-bottom-color: rgba(251, 146, 60, 0.25);
+}
+
+[data-theme="dark"] .btn-rebuild-small {
+  color: #fdba74;
+}
+
 /* Graph node label (domain nodes with count) */
 .graph-node-label {
   display: flex;

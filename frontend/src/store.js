@@ -106,6 +106,8 @@ function saveAssistantMessage(set, get, content, isAborted = false) {
     abortController: null,
   }));
   get().fetchSessions();
+  // Mark knowledge as modified (answer was auto-saved to knowledge base)
+  get().markKnowledgeModified();
   return true;
 }
 
@@ -147,6 +149,8 @@ const useStore = create((set, get) => ({
   graphData: null, // { nodes: [], edges: [] }
   showGraph: false,
   graphLoading: false,
+  graphLastBuiltAt: null, // timestamp when graph cache was last built
+  knowledgeLastModifiedAt: null, // timestamp when knowledge was last modified
 
   // Actions - Error handling
   clearChatError: () => set({ chatError: null }),
@@ -579,6 +583,7 @@ const useStore = create((set, get) => ({
         selectedDomain: s.selectedDomain === domain ? null : s.selectedDomain,
         domainContent: s.selectedDomain === domain ? '' : s.domainContent,
       }));
+      get().markKnowledgeModified();
     } catch (e) {
       console.error('Failed to delete domain', e);
     }
@@ -619,6 +624,7 @@ const useStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, answer }),
       });
+      get().markKnowledgeModified();
     } catch (e) {
       console.error('Failed to update entry', e);
     }
@@ -629,6 +635,7 @@ const useStore = create((set, get) => ({
       await fetch(`/api/knowledge/domains/${encodeURIComponent(domain)}/entries/${entryId}`, {
         method: 'DELETE',
       });
+      get().markKnowledgeModified();
     } catch (e) {
       console.error('Failed to delete entry', e);
     }
@@ -644,7 +651,8 @@ const useStore = create((set, get) => ({
       const res = await fetch('/api/knowledge/graph');
       if (!res.ok) throw new Error('获取图谱失败');
       const data = await res.json();
-      set({ graphData: data });
+      // Record when the graph was built (fetched = using cache built time)
+      set({ graphData: data, graphLastBuiltAt: Date.now() });
     } catch (e) {
       console.error('Failed to fetch knowledge graph', e);
     } finally {
@@ -658,13 +666,18 @@ const useStore = create((set, get) => ({
       const res = await fetch('/api/knowledge/graph/rebuild', { method: 'POST' });
       if (!res.ok) throw new Error('重建图谱失败');
       const data = await res.json();
-      set({ graphData: data });
+      // Rebuild completes: graph is now fresh
+      const now = Date.now();
+      set({ graphData: data, graphLastBuiltAt: now, knowledgeLastModifiedAt: null });
     } catch (e) {
       console.error('Failed to rebuild knowledge graph', e);
     } finally {
       set({ graphLoading: false });
     }
   },
+
+  // Call this after any knowledge mutation to track staleness
+  markKnowledgeModified: () => set({ knowledgeLastModifiedAt: Date.now() }),
 
   setShowGraph: (v) => set({ showGraph: v }),
 
@@ -693,8 +706,8 @@ const useStore = create((set, get) => ({
     });
     if (!res.ok) throw new Error('执行拆分失败');
     const result = await res.json();
-    // 刷新域列表
     get().fetchDomains();
+    get().markKnowledgeModified();
     return result;
   },
 
@@ -753,13 +766,13 @@ const useStore = create((set, get) => ({
       const err = await res.text();
       throw new Error(err || '导入失败');
     }
+    get().markKnowledgeModified();
     return res.json();
   },
 
   smartImportKnowledge: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    // No domain param — backend auto-classifies based on content
     const res = await fetch('/api/knowledge/smart-import', {
       method: 'POST',
       body: formData,
@@ -768,6 +781,7 @@ const useStore = create((set, get) => ({
       const err = await res.text();
       throw new Error(err || '智能导入失败');
     }
+    get().markKnowledgeModified();
     return res.json();
   },
 
@@ -795,6 +809,7 @@ const useStore = create((set, get) => ({
       const err = await res.text();
       throw new Error(err || '导入失败');
     }
+    get().markKnowledgeModified();
     return res.json();
   },
 
